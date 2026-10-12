@@ -70,10 +70,10 @@ enum Page: String, CaseIterable {
             self?.verifyInternet()
         }
         timer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+            Task { @MainActor [weak self] in self?.refresh() }
         }
         NotificationCenter.default.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.connectionGeneration += 1; self?.recovery.reset(); self?.internet = nil; self?.refresh() }
+            Task { @MainActor [weak self] in self?.connectionGeneration += 1; self?.recovery.reset(); self?.internet = nil; self?.refresh() }
         }
         record("已载入 \(loaded.ssid) 配置。")
         DispatchQueue.main.async { [weak self] in self?.refresh() }
