@@ -76,7 +76,7 @@ def main():
     if not bootstrapper.is_file() or bootstrapper.read_bytes()[:2] != b'MZ':
         parser.error('The Microsoft WebView2 bootstrapper must be a Windows executable.')
     switch = '/' if os.name == 'nt' else '-'
-    command = [args.makensis, switch + 'V3', switch + 'WX']
+    command = [args.makensis, switch + 'INPUTCHARSET', 'UTF8', switch + 'V3', switch + 'WX']
     for key, value in {'PAYLOAD': payload, 'OUTPUT': output, 'DELETE_MANIFEST': manifest, 'INSTALL_MANIFEST': install_manifest,
                        'BOOTSTRAPPER': bootstrapper, 'RUNTIME': args.runtime, 'VERSION': '1.3.5', 'SIZE_KB': (size + 1023) // 1024}.items():
         command.append(switch + 'D' + key + '=' + str(value))
