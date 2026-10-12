@@ -20,6 +20,27 @@ using System.Runtime.InteropServices;
 using System.Text;
 public static class InstallerWizard {
     public delegate bool EnumCallback(IntPtr hwnd, IntPtr context);
+    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumCallback callback, IntPtr context);
+    public static IntPtr FindWizard(string title) {
+        IntPtr result = IntPtr.Zero;
+        EnumWindows((hwnd, _) => {
+            if (!IsWindowVisible(hwnd)) return true;
+            var text = new StringBuilder(1024); GetWindowText(hwnd, text, text.Capacity);
+            if (text.ToString().Contains(title)) { result = hwnd; return false; }
+            return true;
+        }, IntPtr.Zero);
+        return result;
+    }
+    public static string Describe(IntPtr parent) {
+        var result = new StringBuilder();
+        EnumChildWindows(parent, (hwnd, _) => {
+            if (!IsWindowVisible(hwnd)) return true;
+            var text = new StringBuilder(1024); GetWindowText(hwnd, text, text.Capacity);
+            result.AppendLine(GetDlgCtrlID(hwnd) + ": " + text.ToString());
+            return true;
+        }, IntPtr.Zero);
+        return result.ToString();
+    }
     [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr parent, EnumCallback callback, IntPtr context);
     [DllImport("user32.dll")] public static extern int GetDlgCtrlID(IntPtr hwnd);
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hwnd);
@@ -43,19 +64,22 @@ public static class InstallerWizard {
 function Install-WithWizard([string]$Target) {
     $process = Start-Process -FilePath $Installer -PassThru
     function Wait-Control([int]$Id, [string]$Title = $null) {
+        Write-Host "Waiting for wizard control id=$Id title=$Title"
         $deadline = [DateTime]::UtcNow.AddSeconds(120)
         do {
-            $process.Refresh()
-            if ($process.HasExited) { throw 'The installation wizard exited before completing.' }
-            $handle = [InstallerWizard]::Find($process.MainWindowHandle, $Id, $Title)
+            # NSIS may run its UI in a child process; resolve the visible wizard itself.
+            $wizard = [InstallerWizard]::FindWizard($appName)
+            $handle = [InstallerWizard]::Find($wizard, $Id, $Title)
             if ($handle -ne [IntPtr]::Zero) { return $handle }
             Start-Sleep -Milliseconds 150
         } while ([DateTime]::UtcNow -lt $deadline)
-        throw 'The installation wizard did not display the expected control.'
+        $details = [InstallerWizard]::Describe($wizard)
+        throw "The wizard did not display control id=$Id title=$Title; hwnd=$wizard; visible controls: $details"
     }
     function Click-Next {
-        $process.Refresh()
-        $button = [InstallerWizard]::GetDlgItem($process.MainWindowHandle, 1)
+        $wizard = [InstallerWizard]::FindWizard($appName)
+        $button = [InstallerWizard]::GetDlgItem($wizard, 1)
+        if ($button -eq [IntPtr]::Zero) { throw 'Wizard Next button not found.' }
         [InstallerWizard]::SendMessage($button, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
         Start-Sleep -Milliseconds 300
     }
