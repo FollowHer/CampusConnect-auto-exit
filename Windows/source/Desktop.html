@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<title>校园 Wi-Fi 助手</title>
+<style>
+:root{color-scheme:light;--accent:#0a7a85;--accent-soft:#e6f1f2;--text:#242426;--muted:#808084;--line:rgba(0,0,0,.09);--sidebar:#f3f3f3;--page:#fff;--card:#fff;--button:#fff;--input:#fff}
+*{box-sizing:border-box}
+body{margin:0;font:13px -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei UI",sans-serif;color:var(--text);background:var(--page);overflow:hidden;cursor:default;-webkit-user-select:none;user-select:none}
+input:not([type="checkbox"]),textarea{cursor:text;-webkit-user-select:text;user-select:text}
+button,input,select{font:inherit}button{cursor:pointer;color:var(--text);border:1px solid #d6d6d7;background:var(--button);border-radius:6px;padding:5px 12px;box-shadow:0 1px 2px #00000006;white-space:nowrap}
+button:hover{filter:brightness(.98)}button:active{transform:translateY(1px)}button:disabled{opacity:.42;cursor:default;transform:none}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid #0a7a8530;outline-offset:2px}
+.primary{background:var(--accent);border-color:var(--accent);color:white;box-shadow:none}
+svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none;vertical-align:middle}
+.row{display:flex;align-items:center;gap:12px}.between{justify-content:space-between}.grow{flex:1;min-width:0}.muted{color:var(--muted)}.small{font-size:11px}.stack{display:flex;flex-direction:column;gap:16px}
+.app{height:100vh;display:grid;grid-template-columns:220px minmax(0,1fr)}
+.sidebar{background:var(--sidebar);border-right:1px solid var(--line);padding:26px 18px 24px;display:flex;flex-direction:column}
+.brand{display:flex;gap:11px;align-items:center;margin-bottom:28px}
+.brand-logo{width:48px;height:48px;border-radius:15px;background:var(--accent);color:white;display:grid;place-items:center}
+.brand-logo svg{width:30px;height:30px}.brand-name{font-size:19px;font-weight:700;white-space:nowrap}
+.brand-caption{font-size:9px;font-weight:600;letter-spacing:1.5px;color:var(--muted);margin-top:3px;white-space:nowrap}
+.nav{display:flex;flex-direction:column;gap:7px;position:relative;isolation:isolate}.nav::before{content:"";position:absolute;top:0;left:0;right:0;height:45px;border-radius:10px;background:var(--accent-soft);transform:translateY(var(--nav-offset,0px));z-index:-1;pointer-events:none;transition:none}.nav button{border:0;box-shadow:none;background:none;display:flex;align-items:center;gap:12px;text-align:left;padding:13px 14px;border-radius:10px;height:45px;font-size:13px}
+.nav button.active{color:var(--accent);font-weight:600;background:transparent}.nav button svg{width:20px}
+.sidebar-footer{margin-top:auto;padding-top:24px;line-height:1.7}.sidebar-footer .row{font-weight:600;font-size:12px;margin-bottom:8px;gap:7px}.sidebar-footer svg{width:15px;height:15px}
+.main{min-width:0;display:flex;flex-direction:column;min-height:0}
+.header{padding:26px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);gap:18px;flex:none}
+h1{font-size:26px;font-weight:700;margin:0 0 6px;line-height:1.22}.subtitle{font-size:12px;color:var(--muted);line-height:1.5}
+.refresh{display:flex;gap:6px;align-items:center}.refresh svg{width:14px;height:14px}
+.content{flex:1;min-height:0;position:relative;overflow:hidden}.page{position:absolute;inset:0;height:100%;overflow:auto;padding:26px;background:var(--page)}.page[hidden]{display:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px}
+.dashboard{display:flex;flex-direction:column;gap:20px}
+.connection{align-items:flex-start;gap:18px}.connection-icon{color:var(--accent);width:54px;height:54px;flex:none;display:grid;place-items:center;border:2px solid var(--accent);border-radius:50%}.connection-icon svg{width:35px;height:35px}
+h2{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 10px}.target{font-size:13px;color:var(--muted);margin-bottom:14px}
+h3{font-size:15px;font-weight:600;margin:0 0 6px}.description{font-size:12px;color:var(--muted);line-height:1.6}
+.toggle{appearance:none;width:34px;height:20px;position:relative;background:#c5c5c8;border:0;border-radius:20px;flex:none;margin:0;cursor:pointer;transition:background .15s}
+.toggle:before{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px #0002;transition:left .15s}
+.toggle:checked{background:var(--accent)}.toggle:checked:before{left:16px}.toggle:disabled{opacity:.45;cursor:default}
+.permission-icon{color:var(--accent)}.permission-icon svg{width:27px;height:27px}
+.network-heading{font-size:16px;font-weight:600;margin:0}.network-empty{padding:28px;text-align:center;color:var(--muted);line-height:2}
+.network-empty svg{width:30px;height:30px;margin-bottom:6px}
+.network-row{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--line)}
+.network-row .wifi-icon{color:var(--muted);width:22px}.network-row.target-network .wifi-icon{color:var(--accent)}
+.network-title{font-size:13px;font-weight:500;display:flex;gap:7px;align-items:center}.network-subtitle{font-size:11px;color:var(--muted);margin-top:4px}
+.badge{font-size:10px;color:var(--accent);background:var(--accent-soft);padding:3px 7px;border-radius:20px;font-weight:600}
+.connected{font-size:11px;color:var(--accent)}.network-row button{font-size:11px;padding:3px 9px}
+.section-title{font-size:16px;font-weight:600;display:flex;align-items:center;gap:8px;margin:0}
+.field{display:flex;flex-direction:column;gap:7px;font-size:12px;font-weight:500}.field input{width:100%;padding:6px 9px;border:1px solid #d5d5d7;border-radius:6px;background:var(--input);color:var(--text);outline:none;font-size:13px;font-weight:400}
+.field input:focus{border-color:var(--accent);box-shadow:0 0 0 2px #0a7a8520}.field input::placeholder{color:#aaa}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.segment{display:flex;border:1px solid #d7d7da;background:#e9e9ec;padding:2px;border-radius:7px;gap:2px}
+.segment button{flex:1;border:0;box-shadow:none;padding:5px 8px;background:none}.segment button.active{background:white;border-radius:5px;box-shadow:0 1px 3px #0002}
+.check{display:flex;align-items:center;gap:7px;font-size:13px}.check input{accent-color:var(--accent);margin:0}
+.settings-stack{gap:18px}.settings-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.settings-actions .muted{margin-left:auto;font-size:11px}
+details>summary{list-style:none;cursor:pointer;font-size:13px}details>summary:before{content:"›";display:inline-block;width:14px;font-size:17px;line-height:12px;transition:transform .1s}details[open]>summary:before{transform:rotate(90deg)}
+.advanced{padding-top:12px}.advanced .description{font-size:11px}
+.settings-note{font-size:11px;color:var(--muted);line-height:1.6}
+.portal-page{display:flex;flex-direction:column;padding:24px;gap:12px;overflow:hidden}.portal-address{display:flex;align-items:center;gap:12px;font-size:11px;min-height:28px}.portal-address span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;font-family:ui-monospace,monospace}
+.portal-slot{flex:1;min-height:100px;border-radius:12px;border:1px solid var(--line);background:var(--sidebar);display:grid;place-items:center;text-align:center;color:var(--muted);overflow:hidden}
+.portal-slot .hint svg{width:38px;height:38px;margin-bottom:10px}.portal-slot .hint p{font-size:12px;line-height:1.7}
+.footer{flex:none;border-top:1px solid var(--line);padding:12px 24px;display:flex;align-items:center;gap:8px;font-size:11px;min-height:40px}
+.dot{width:6px;height:6px;border-radius:50%;background:#929296;flex:none}.dot.online{background:var(--accent)}
+.status{flex:1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.version{font-size:10px;color:var(--muted);white-space:nowrap;margin-left:8px}
+.spinner{width:15px;height:15px;border:2px solid #ddd;border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+[hidden]{display:none!important}@keyframes spin{to{transform:rotate(360deg)}}.header-actions{display:flex;gap:12px;align-items:center}
+@media(prefers-color-scheme:dark){:root{color-scheme:dark;--text:#eee;--muted:#99999f;--line:rgba(255,255,255,.09);--sidebar:#282829;--page:#1e1e1e;--card:#29292b;--button:#3a3a3c;--input:#363638;--accent:#15929c;--accent-soft:#1d393c}button{border-color:#555}.segment{background:#222;border-color:#444}.segment button.active{background:#555}.field input{border-color:#555}}
+.author{font-size:11px;font-weight:400;color:var(--muted);text-align:left}
+.license-note{font-size:11px;color:var(--muted);margin:3px 0 16px}
+button{transition:background-color .16s,color .16s,box-shadow .16s,transform .16s}
+.card{transition:border-color .2s,box-shadow .2s}.card:hover{border-color:color-mix(in srgb,var(--accent) 25%,var(--line));box-shadow:0 4px 16px #00000005}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+.nav::before{transition:none!important}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="sidebar">
+  <div class="brand"><div class="brand-logo" data-icon="wifi"></div><div><div class="brand-name">校园 Wi-Fi</div><div class="brand-caption">CAMPUS CONNECT</div></div></div>
+  <nav class="nav" aria-label="主导航">
+    <button data-page="dashboard" class="active"><i data-icon="wifi"></i>网络概览</button>
+    <button data-page="settings"><i data-icon="sliders"></i>校园网设置</button>
+    <button data-page="portal"><i data-icon="globe"></i>上网认证</button>
+  </nav>
+  <div class="sidebar-footer"><div class="author">By Ye</div><div class="license-note">MIT 开源项目</div><div class="row"><i data-icon="shield"></i>本地运行</div><div class="small muted">账号密码加密保存在本机<br>关闭窗口后仍可在托盘运行</div></div>
+</aside>
+<main class="main">
+  <header class="header"><div><h1 id="title">网络概览</h1><div class="subtitle" id="subtitle">到达校园，连接自动完成。</div></div><div class="header-actions"><div class="spinner" id="busy" hidden></div><button class="refresh" data-action="refresh"><i data-icon="refresh"></i>刷新网络</button></div></header>
+  <div class="content">
+    <section class="page" id="page-dashboard" aria-label="网络概览">
+      <div class="dashboard">
+        <div class="card"><div class="row connection"><div class="connection-icon" data-icon="wifi"></div><div class="grow"><h2 id="connection-title">正在读取 Wi-Fi 状态</h2><div class="target">目标校园网&nbsp; <span id="target">HNPI-STU</span></div><div class="row"><button class="primary" data-action="connect">立即连接</button><button data-goto="settings">修改配置</button></div></div></div></div>
+        <div class="card row between"><div><h3>自动连接与认证</h3><div class="description">发现 <span id="auto-target">HNPI-STU</span> 后连接，并使用已保存账号登录。</div></div><input id="automatic" class="toggle" type="checkbox" aria-label="自动连接"></div>
+        <div class="card row" id="permission-card" hidden><div class="permission-icon" data-icon="location"></div><div class="grow"><h3>允许读取附近 Wi-Fi</h3><div class="description">请在 Windows 设置中允许桌面应用访问位置信息</div></div><button class="primary" data-action="location">授权定位</button></div>
+        <div><div class="row between" style="margin-bottom:14px"><h3 class="network-heading">附近网络</h3><span class="small muted" id="scan-time"></span></div><div id="networks"><div class="network-empty"><i data-icon="antenna"></i><div>点击刷新扫描附近网络</div></div></div></div>
+      </div>
+    </section>
+    <section class="page" id="page-settings" aria-label="校园网设置" hidden>
+      <div class="stack settings-stack">
+        <div class="card row between">
+          <div class="grow"><h3>开机自启</h3><div class="description" id="startup-description">登录 Windows 后在托盘运行，自动连接按已保存设置执行。开关立即生效。</div><div class="settings-note">若启动项已被 Windows 禁用，请在系统“启动应用”中重新开启。</div></div>
+          <input id="startup" class="toggle" type="checkbox" aria-label="开机自启" aria-describedby="startup-description" disabled>
+        </div>
+        <div class="card stack">
+          <h3 class="section-title"><i data-icon="wifi"></i>校园 Wi-Fi</h3>
+          <label class="field">网络名称（SSID，精确匹配）<input id="ssid" maxlength="32" autocomplete="off" value="HNPI-STU"></label>
+          <div class="segment" role="group" aria-label="连接方式"><button data-mode="open" class="active">开放网络</button><button data-mode="saved">使用 Windows 已保存的配置</button></div>
+          <div class="settings-note" id="join-help">HNPI-STU 默认按开放网络处理；学号和密码在下方网页认证中填写。</div>
+          <button id="wifi-settings" data-action="wifiSettings" style="align-self:flex-start" hidden>打开 Windows Wi-Fi 设置</button>
+        </div>
+        <div class="card stack">
+          <div class="row between"><h3 style="margin:0">连接后进行网页认证</h3><input id="portalEnabled" class="toggle" type="checkbox" aria-label="连接后进行网页认证" checked></div>
+          <div id="portal-fields" class="stack">
+            <label class="field">认证页面地址<input id="portalUrl" placeholder="http://192.168.0.123" value="http://192.168.0.123" autocomplete="off"></label>
+            <div class="field-row"><label class="field">学号 / 上网账号<input id="username" placeholder="输入账号" autocomplete="off"></label><label class="field">上网密码<input id="password" type="password" placeholder="输入上网密码" autocomplete="new-password"></label></div>
+            <label class="check"><input id="autoSubmit" type="checkbox" checked>自动填写后点击登录</label>
+            <details><summary>高级设置 · 特殊认证页面</summary><div class="advanced stack">
+              <div class="description">留空时自动识别。若学校页面包含验证码、运营商选择或特殊表单，可先手动完成，再按页面调整。</div>
+              <label class="field">账号输入框 CSS 选择器<input id="userSelector" placeholder="例如 #username" autocomplete="off"></label>
+              <label class="field">密码输入框 CSS 选择器<input id="passwordSelector" placeholder="例如 #password" autocomplete="off"></label>
+              <label class="field">登录按钮 CSS 选择器<input id="submitSelector" placeholder="例如 #login" autocomplete="off"></label>
+            </div></details>
+          </div>
+        </div>
+        <div class="settings-actions"><button class="primary" id="save-enable">保存并开启自动连接</button><button id="save">保存设置</button><span class="muted">密码保存在本机</span></div>
+        <div class="settings-note">修改后点击保存。下次打开会沿用已保存的账号和密码。</div>
+      </div>
+    </section>
+    <section class="page portal-page" id="page-portal" aria-label="上网认证" hidden>
+      <div class="row"><button class="primary" data-action="openPortal" data-campus>打开并填写</button><button data-action="discoverPortal" data-campus>探测认证地址</button><button data-action="checkInternet" data-campus>检查上网状态</button><button data-action="stopPortal" style="margin-left:auto">停止</button></div>
+      <div class="description" id="portal-status">连接校园网后，在这里完成上网认证。</div>
+      <div class="portal-address" id="portal-address-row" hidden><span id="portal-address"></span><button data-action="adoptAddress">使用当前页面地址</button></div>
+      <div class="portal-slot" id="portal-slot"><div class="hint"><i data-icon="globe"></i><p>学校认证页面将在这里打开<br>请先连接已设置的校园 Wi-Fi</p></div></div>
+    </section>
+  </div>
+  <footer class="footer"><span class="dot" id="status-dot"></span><span class="status" id="status">准备就绪</span><span class="version">v1.3.5 · Windows</span></footer>
+</main>
+</div>
+<script>
+(() => {
+const icons = {
+ wifi:'<path d="M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0M8.5 15.5a5.5 5.5 0 0 1 7 0"/><circle cx="12" cy="19" r="1" fill="currentColor" stroke="none"/>',
+ sliders:'<path d="M5 3v4m0 4v10M12 3v10m0 4v4M19 3v2m0 4v12"/><path d="M2 7h6v4H2zM9 13h6v4H9zM16 5h6v4h-6z"/>',
+ globe:'<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/>',
+ shield:'<path d="M12 2l8 4v6c0 5-8 10-8 10S4 17 4 12V6z"/><rect x="9" y="10" width="6" height="5" rx="1"/><path d="M10 10V8a2 2 0 0 1 4 0v2"/>',
+ refresh:'<path d="M20 7v5h-5M4 17v-5h5M5 7a8 8 0 0 1 13-2l2 3M4 16l2 3a8 8 0 0 0 13-2"/>',
+ location:'<circle cx="12" cy="12" r="9"/><path d="M7 11l10-4-4 10-2-4z"/>',
+ antenna:'<path d="M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14M8 8a6 6 0 0 0 0 8M16 8a6 6 0 0 1 0 8M12 14v8"/><circle cx="12" cy="11" r="2"/>'
+};
+const svg = key => '<svg viewBox="0 0 24 24" aria-hidden="true">' + icons[key] + '</svg>';
+document.querySelectorAll('[data-icon]').forEach(e => {e.innerHTML=svg(e.dataset.icon);});
+const byId = id => document.getElementById(id);
+const titles = {dashboard:['网络概览','到达校园，连接自动完成。'],settings:['校园网设置','设置目标网络、账号和上网认证方式。'],portal:['上网认证','在校园网内打开登录页并填写已保存的凭据。']};
+let page='dashboard', mode='open', automatic=false, state={}, dirty=false;
+let boundsFrame=0, lastBounds='', networkRenderKey=null;
+let transitionId=0, transitioning=false, pageAnimations=[];
+const nav=document.querySelector('.nav');
+const post = (command,data={}) => { if(window.chrome?.webview)window.chrome.webview.postMessage({command,...data}); };
+function bounds() {
+ boundsFrame=0;
+ if(page!=='portal'||transitioning)return;
+ const r=byId('portal-slot').getBoundingClientRect();
+ const value={page,x:r.x+1,y:r.y+1,width:Math.max(0,r.width-2),height:Math.max(0,r.height-2),viewportWidth:innerWidth,viewportHeight:innerHeight};
+ const key=JSON.stringify(value);
+ if(key!==lastBounds){lastBounds=key;post('portalBounds',value);}
+}
+function scheduleBounds() {
+ if(page==='portal'&&!transitioning&&!boundsFrame)boundsFrame=requestAnimationFrame(bounds);
+}
+function go(next) {
+ if(!titles[next]||next===page)return;
+ const id=++transitionId, previous=byId('page-'+page), incoming=byId('page-'+next);
+ const direction=Object.keys(titles).indexOf(next)>Object.keys(titles).indexOf(page)?1:-1;
+ pageAnimations.forEach(animation=>animation.cancel());pageAnimations=[];
+ page=next;transitioning=true;
+ nav.style.setProperty('--nav-offset',document.querySelector('[data-page="'+next+'"]').offsetTop+'px');
+ document.querySelectorAll('.page').forEach(e=>{e.hidden=e!==incoming&&(!transitioning||e!==previous);e.inert=e!==incoming;});
+ document.querySelectorAll('[data-page]').forEach(e=>{e.classList.toggle('active',e.dataset.page===next);e.setAttribute('aria-current',e.dataset.page===next?'page':'false');});
+ byId('title').textContent=titles[next][0];byId('subtitle').textContent=titles[next][1];
+ renderActivePage();
+ // The separate native authentication view appears only after the slide settles.
+ post('page',{page,transitioning});
+ const finish=()=>{
+   if(id!==transitionId)return;
+   transitioning=false;previous.hidden=true;
+   pageAnimations.forEach(animation=>animation.cancel());pageAnimations=[];
+   if(page==='portal'){lastBounds='';bounds();}
+   post('page',{page,transitioning:false});
+ };
+ if(!transitioning){finish();return;}
+ const timing={duration:280,easing:'cubic-bezier(.22,.61,.36,1)',fill:'both'};
+ pageAnimations=[
+   previous.animate([{transform:'translateX(0)'},{transform:`translateX(${-direction*100}%)`}],timing),
+   incoming.animate([{transform:`translateX(${direction*100}%)`},{transform:'translateX(0)'}],timing)
+ ];
+ Promise.all(pageAnimations.map(animation=>animation.finished)).then(finish,()=>{});
+}
+function setMode(next) {
+ mode=next;
+ document.querySelectorAll('[data-mode]').forEach(e=>e.classList.toggle('active',e.dataset.mode===mode));
+ byId('join-help').textContent=mode==='open'?'HNPI-STU 默认按开放网络处理；学号和密码在下方网页认证中填写。':'Wi-Fi 密码或企业认证：先在 Windows 设置中连接一次并保存，之后由助手自动连接。';
+ byId('wifi-settings').hidden=mode==='open';
+}
+function profile() {
+ return {ssid:byId('ssid').value.trim(),portalUrl:byId('portalUrl').value.trim(),username:byId('username').value.trim(),useSavedWifiProfile:mode==='saved',portalEnabled:byId('portalEnabled').checked,autoSubmit:byId('autoSubmit').checked,automatic,userSelector:byId('userSelector').value.trim(),passwordSelector:byId('passwordSelector').value.trim(),submitSelector:byId('submitSelector').value.trim()};
+}
+function loadProfile(p,password) {
+ for(const key of ['ssid','portalUrl','username','userSelector','passwordSelector','submitSelector'])byId(key).value=p[key]||'';
+ byId('password').value=password||'';byId('portalEnabled').checked=p.portalEnabled;byId('autoSubmit').checked=p.autoSubmit;
+ byId('portal-fields').hidden=!p.portalEnabled;setMode(p.useSavedWifiProfile?'saved':'open');automatic=p.automatic;dirty=false;
+}
+function textNode(tag,text,className) { const e=document.createElement(tag);e.textContent=text;if(className)e.className=className;return e; }
+function setText(id,value) {const e=byId(id);if(e.textContent!==value)e.textContent=value;}
+function update(s) {
+ state=s;automatic=s.automatic;
+ setText('status',s.status||'');setText('connection-title',s.connectionTitle||'');
+ setText('target',s.target||'');setText('auto-target',s.target||'');byId('automatic').checked=s.automatic;
+ byId('automatic').disabled=s.busy;byId('busy').hidden=!s.busy;byId('permission-card').hidden=!s.permissionNeeded;
+ byId('status-dot').classList.toggle('online',s.internetOnline===true);
+ byId('scan-time').textContent=s.lastScan?'更新于 '+s.lastScan:'';
+ document.querySelectorAll('[data-action="refresh"],[data-action="connect"],#save,#save-enable').forEach(e=>e.disabled=s.busy);
+ document.querySelectorAll('[data-campus]').forEach(e=>e.disabled=!s.campusConnected||s.busy);
+ setText('portal-status',s.portalStatus||'');setText('portal-address',s.portalAddress||'');
+ byId('portal-address-row').hidden=!s.portalAddress;
+ renderActivePage();
+ scheduleBounds();
+}
+function renderActivePage() {
+ if(page==='dashboard')renderNetworks(state);
+}
+function renderNetworks(s) {
+ const key=JSON.stringify([s.target,s.currentSsid,s.permissionNeeded,s.networks||[]]);
+ if(key===networkRenderKey){byId('networks').querySelectorAll('button').forEach(e=>e.disabled=!!s.busy);return;}
+ networkRenderKey=key;
+ const list=byId('networks');list.replaceChildren();
+ if(!s.networks?.length) {
+   const empty=document.createElement('div');empty.className='network-empty';empty.innerHTML=svg('antenna');
+   empty.append(textNode('div',s.permissionNeeded?'授权定位后显示真实网络列表':'点击刷新扫描附近网络'));list.append(empty);
+ } else for(const n of s.networks) {
+   const row=document.createElement('div');row.className='network-row'+(n.ssid===s.target?' target-network':'');
+   const icon=document.createElement('span');icon.className='wifi-icon';icon.innerHTML=svg('wifi');row.append(icon);
+   const body=document.createElement('div');body.className='grow';const name=textNode('div',n.ssid,'network-title');
+   if(n.ssid===s.target)name.append(textNode('span','校园网','badge'));
+   body.append(name,textNode('div',(n.secure?'加密':'开放')+' · '+n.signal+'%','network-subtitle'));row.append(body);
+   if(n.ssid===s.currentSsid)row.append(textNode('span','已连接','connected'));
+   const button=textNode('button','设为目标');button.disabled=s.busy;button.addEventListener('click',()=>{
+     if(byId('ssid').value!==n.ssid){byId('username').value='';byId('password').value='';}
+     byId('ssid').value=n.ssid;setMode(n.secure?'saved':'open');dirty=true;go('settings');
+   });row.append(button);list.append(row);
+ }
+}
+function receive(message) {
+ if(message.kind==='state')update(message.state);
+ if(message.kind==='startup'){
+   byId('startup').checked=!!message.enabled;
+   byId('startup').disabled=!message.available;
+   byId('startup-description').textContent=message.error||(message.enabled?'已开启：登录 Windows 后在托盘运行，自动连接按已保存设置执行。':'登录 Windows 后在托盘运行，自动连接按已保存设置执行。开关立即生效。');
+ }
+ if(message.kind==='profile')loadProfile(message.profile,message.password);
+ if(message.kind==='page')go(message.page);
+ if(message.kind==='address'){byId('portalUrl').value=message.address;dirty=true;go('settings');}
+}
+window.campus={receive};
+window.chrome?.webview?.addEventListener('message',e=>receive(e.data));
+document.querySelectorAll('[data-page]').forEach(e=>{
+ e.addEventListener('pointerenter',event=>{
+   if(event.pointerType==='touch')return;
+   go(e.dataset.page);
+ });
+ e.addEventListener('click',()=>go(e.dataset.page));
+});
+document.querySelectorAll('[data-goto]').forEach(e=>e.addEventListener('click',()=>go(e.dataset.goto)));
+document.querySelectorAll('[data-action]').forEach(e=>e.addEventListener('click',()=>post(e.dataset.action)));
+document.querySelectorAll('[data-mode]').forEach(e=>e.addEventListener('click',()=>{setMode(e.dataset.mode);dirty=true;}));
+byId('startup').addEventListener('change',()=>{byId('startup').disabled=true;post('setStartup',{enabled:byId('startup').checked});});
+byId('page-settings').addEventListener('input',()=>{dirty=true;});
+byId('portalEnabled').addEventListener('change',()=>{byId('portal-fields').hidden=!byId('portalEnabled').checked;});
+byId('automatic').addEventListener('change',()=>{
+ const enabled=byId('automatic').checked;
+ post('setAutomatic',{enabled,profile:profile(),password:byId('password').value});
+});
+byId('save').addEventListener('click',()=>post('save',{profile:profile(),password:byId('password').value}));
+byId('save-enable').addEventListener('click',()=>post('save',{profile:{...profile(),automatic:true},password:byId('password').value}));
+new ResizeObserver(scheduleBounds).observe(byId('portal-slot'));
+window.addEventListener('resize',scheduleBounds);
+
+post('ready');
+})();
+</script>
+</body>
+</html>

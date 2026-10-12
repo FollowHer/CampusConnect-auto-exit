@@ -1,0 +1,124 @@
+# Windows 版
+
+适用 Windows 10/11 64 位。默认下载 x64 版；ARM 电脑可使用 Actions 生成的 `win-arm64` 版。
+
+## 1.3.5 默认窗口放大
+
+- 默认内容区域由 1060 × 760 增大为 1280 × 860，打开时居中，仍可手动调整窗口大小。
+
+## 安装与使用
+
+1. 双击 **`CampusConnect-Windows-x64-Setup.exe`**，按中文向导安装。
+2. 在「选择安装位置」中修改完整路径，浏览选中的文件夹就是最终安装目录，不再自动添加子文件夹。安装完成页会显示实际安装路径。默认安装到 `%LOCALAPPDATA%\Programs\CampusConnect`。可选择其他有写入权限的独立文件夹，例如 `D:\Apps\CampusConnect`。
+3. 在组件页选择是否创建桌面快捷方式（默认勾选）。开始菜单快捷方式和 Windows 卸载入口始终创建。程序已包含 .NET，无须单独安装 .NET。应用窗口、任务栏、托盘、安装包及快捷方式使用与 Mac 一致的校园 Wi-Fi 图标。
+4. 程序界面和网页认证需要 WebView2。安装程序会检测已安装的版本，缺少时运行 Microsoft 官方引导程序安装；**下载组件时需要联网**。如果当时校园网还没有认证，可先用手机热点完成组件安装。
+5. 安装完成后，可直接运行，或通过桌面 / 开始菜单的「校园 Wi-Fi 助手」打开。
+6. 在「校园网设置」填写学校 Wi-Fi 名称、认证网址、上网账号和密码，然后保存。
+7. 开放的 `HNPI-STU` 使用默认连接方式；加密或企业 Wi-Fi 需先在 Windows Wi-Fi 设置中连接并保存，再选择「使用 Windows 已保存的配置」。
+8. 点击「立即连接」。需要自动连接时勾选设置中的自动连接并保存。
+
+1.2 版只需分发一个 Setup.exe 安装文件。主程序及 .NET 依赖合并为一个 `CampusConnect.exe`，安装目录另有卸载程序及 `licenses/` 许可证目录，无须手动复制 DLL。运行时的原生组件缓存和 WebView2 用户数据由程序另行管理。
+
+界面按照 Mac 版重新制作：三个页面（网络概览、校园网设置、上网认证）、青绿色主题、圆角卡片和设置分组，并支持深色模式。系统标题栏、字体和 Windows Wi-Fi 配置选项保留平台差异。
+
+Windows 如果拒绝读取 Wi-Fi，在「设置 → 隐私和安全性 → 位置」中开启定位服务并允许桌面应用访问。应用内有定位设置入口。
+
+关闭窗口后保留在右下角托盘（可能位于隐藏图标菜单中），双击恢复窗口，右键可暂停自动连接或退出。在「校园网设置」顶部开启「开机自启」后，会在当前用户登录 Windows 时自动运行并留在托盘，不弹出主窗口。此开关立即生效，与自动连接独立；不需要重新填写校园账号。默认关闭，关闭后删除启动项。若在 Windows“启动应用”中禁用了该项，需到系统设置重新开启。
+
+## 1.3.4 认证失效自动恢复
+
+- 两平台均使用即时悬停选择，内容推进动画为 280ms；认证准备、SSID 查询和联网检查不阻塞导航。
+- 学校认证初始化在 DOM 就绪时开始，无须等背景图片；参数和加密公钥就绪后以 150ms 检查间隔尽早填写、提交，提交后 1 秒开始检查互联网。
+
+- Wi-Fi 仍连接时每 20 秒检查互联网，校验两个站点的固定响应，拒绝认证页、重定向和缓存结果。
+- 探测绑定目标 WLAN 网卡，不借用其他网卡或系统代理的联网结果。
+- 认证失效后自动恢复，超时连续两次确认；重试间隔从 60 秒逐步增加至最多 300 秒，手动填写时不反复刷新。
+
+## 1.3.3 底部说明与文字交互
+
+- 左下角说明调整为“MIT 开源项目”，保持原有字号、颜色和左对齐。
+- 普通界面文字使用箭头光标且不可选中；账号密码等输入框保留正常选择、编辑和粘贴。
+
+## 1.3.2 悬停切换与推进动画
+
+- 鼠标在菜单停留 100ms 即切换页面，高亮随导航滑动；保留点击和键盘激活。
+- 页面使用 480ms 双向推进动画，独立于 Windows 系统动画开关。
+
+## 1.3.1 页面切换与署名
+
+- 左侧 By Ye 左对齐，使用与说明文字一致的 11px 字号和灰色。
+- 三个页面按导航方向横向推进切换，支持系统减少动态效果设置。
+
+## 1.3.0 开机自启与精简界面
+
+- 「开机自启」使用当前用户的 Windows Run 启动项，正确处理中文和含空格的安装路径。重复的自动启动静默退出；正常打开仍可从托盘恢复。升级或更换安装目录时更新已有启动路径，卸载时移除启动项。
+- 删除 Windows 的「网络诊断」「运行记录」页面及相应命令，只保留当前操作状态。校园认证和自动重连逻辑保持原有行为。
+- 新增短时页面淡入、按钮和卡片过渡；遵循系统“减少动态效果”偏好。认证浏览器的位置不参与位移动画。
+- 左下角显示 **By Ye · MIT 开源软件**；安装器也显示署名和提示。
+- 安装包使用非 solid 的 zlib 压缩，优先缩短解压过程；代价是下载体积增加。安装页默认展开详情，逐个显示文件名称、字节数、目标目录，并显示卸载文件、注册表、快捷方式及 WebView2 检测步骤。已安装的 WebView2 不重复下载。
+- 新版已通过本机交叉编译和前端回归。Windows 虚拟机已按用户要求关闭，尚未实测本版的登录自启、安装耗时与卸载；相关 Windows 集成检查已补充到测试中。
+
+## 1.2.4 启动与界面性能
+
+- 配置读取与浏览器初始化并行；界面就绪后先读取系统缓存的 Wi-Fi 列表，再在后台扫描更新。
+- WLAN 句柄创建、扫描、连接及当前 SSID 查询全部在后台工作线程中执行；网络诊断的系统信息读取也移到后台。页面导航可继续响应。
+- 主界面与认证页复用同一个 WebView2 环境，认证浏览器保留独立的安全设置，仍然无法访问应用命令桥。
+- 同一轮操作的状态通知合并；未变化的网络、记录及认证页位置不再重复重建或发送。隐藏页面的数据在进入页面时显示最新内容，未保存的设置继续保留。
+- 发布启用 [ReadyToRun 预编译](https://learn.microsoft.com/en-us/dotnet/core/deploying/ready-to-run)，减少启动时的即时编译工作。单文件程序体积会增加，仍只需一个安装包。
+
+前端回归与跨平台编译已通过；实际冷启动和 WLAN 操作时的响应速度需要在 Windows 实机测量。
+
+## 卸载与重新安装
+
+- 在 Windows「设置 → 应用 → 已安装的应用」中找到「校园 Wi-Fi 助手」并卸载，也可使用开始菜单中的卸载入口。
+- 卸载前从系统托盘退出应用；向导会提示正在运行的程序。
+- 卸载默认保留账号配置，可勾选「同时删除校园账号配置和浏览器缓存」。只删除安装包所属的程序文件，保留安装目录中的其他文件。
+- 重新安装时自动填入之前的目录；无论使用原目录还是更换目录，都会先清理旧版程序文件（包括旧版 DLL），保留账号设置。
+- 如果 Windows 设置提示找不到卸载程序：先从系统托盘退出应用，再运行 **最新安装包**，选择原来的安装目录完成修复，然后重新打开 Windows 设置卸载。修复会重新生成 `Uninstall.exe` 和卸载入口，保留账号配置。旧卸载程序缺失时，需先在原目录修复，再更换目录。
+- 安装器检查程序文件、卸载文件和注册表写入结果；不会在卸载程序生成失败后继续报告安装完成。
+- 本安装包为当前用户安装，默认不需要管理员权限。`Program Files` 等受保护目录可能不可写，请选择自己的用户目录或数据盘目录。
+
+## 本地数据
+
+配置保存于 `%LOCALAPPDATA%\CampusConnect\configuration.json`，上网密码使用 Windows 当前用户 DPAPI 加密；迁移到其他电脑后需重新输入密码。WebView2 数据目录也在此用户目录下。不要将个人配置和浏览器数据提交到 GitHub。
+
+应用生成的开放 Wi-Fi 配置使用手动连接模式；已由 Windows 自行设置的自动连接由系统管理。暂停本应用不会更改已有系统 Wi-Fi 配置。
+
+认证浏览器会绕过系统显式 HTTP 代理，但 VPN/TUN 的路由仍可能影响校园认证，必要时先完成认证再开启 VPN。本版未移植 macOS 的物理 Wi-Fi 绑定代理。
+
+## 构建
+
+安装 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)，在仓库根目录执行：
+
+```powershell
+dotnet run --project Windows/tests -c Release
+powershell -ExecutionPolicy Bypass -File Windows/build.ps1 -Runtime win-x64
+# ARM64 电脑可构建：
+powershell -ExecutionPolicy Bypass -File Windows/build.ps1 -Runtime win-arm64
+```
+
+输出位于 `Windows/dist/win-x64/` 或 `Windows/dist/win-arm64/`，各目录仅包含一个 `CampusConnect.exe`。
+
+生成安装程序还需要 [NSIS](https://nsis.sourceforge.io/Download) 和 Python 3。在 PowerShell 执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File Windows/build-installer.ps1 -Runtime win-x64
+```
+
+构建时从 Microsoft 下载并验证 WebView2 引导程序签名，输出 `Windows/installer/dist/CampusConnect-Windows-x64-Setup.exe`。ARM64 同理传入 `-Runtime win-arm64`。
+
+已发布程序的情况下，可通过 Python 调用原生 NSIS 编译器跨平台构建安装包：
+
+```sh
+python3 Windows/installer/build.py --makensis /path/to/makensis --bootstrapper /path/to/MicrosoftEdgeWebview2Setup.exe
+```
+
+安装器默认交互运行，也支持 `Setup.exe /S /D=D:\Apps\CampusConnect` 静默安装，`/D=` 必须放在最后且不加引号；`/SKIPWEBVIEW2` 仅用于已另行部署 WebView2 的环境，缺少该组件时程序无法显示界面。静默卸载默认保留用户配置。
+
+macOS / Linux 安装 .NET 10 SDK 后也可交叉编译 Windows 运行包：
+
+```sh
+dotnet publish Windows/source/CampusConnect.csproj -c Release -r win-x64 --self-contained true -p:PublishReadyToRun=true -o Windows/dist/win-x64
+```
+
+此应用和安装器未进行 Windows 商业代码签名。安装包已完成交叉编译与打包检查，但安装向导、快捷方式、卸载以及校园连接仍需在 Windows 实机验证；见仓库根目录的 `VALIDATION.md`。

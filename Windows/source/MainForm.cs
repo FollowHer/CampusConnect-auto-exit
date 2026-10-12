@@ -1,0 +1,377 @@
+using System.Diagnostics;
+using System.Text;
+using System.Text.Json;
+using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.WinForms;
+
+namespace CampusConnect;
+
+internal sealed class MainForm : Form
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private CampusProfile saved = new();
+    private string savedPassword = "";
+    private readonly AutoPolicy policy = new();
+    private readonly PortalRecovery recovery = new();
+    private readonly PortalController portal;
+    private readonly WebView2 shell = new() { Dock = DockStyle.Fill };
+    private readonly System.Windows.Forms.Timer timer = new() { Interval = 20000 };
+    private readonly NotifyIcon tray;
+    private readonly StartupRegistration startup = new(Application.ExecutablePath);
+    private IReadOnlyList<WifiNetwork> networks = [];
+    private string? currentSsid;
+    private string status = "准备就绪";
+    private string portalStatus = "连接校园网后，在这里完成上网认证。";
+    private string page = "dashboard";
+    private bool pageTransitioning;
+    private string lastScan = "";
+    private bool busy, joining, checking, exiting, uiReady, permissionNeeded, stateQueued;
+    private Task<CoreWebView2Environment>? browserEnvironment;
+    private Task<(CampusProfile Profile, string Password)>? configurationLoad;
+    private bool? online;
+    private int generation;
+    private Rectangle portalBounds;
+    private readonly string? verificationPath;
+
+    public MainForm(string? verificationPath = null, bool startInTray = false)
+    {
+        this.verificationPath = verificationPath;
+        portal = new(GetBrowserEnvironmentAsync);
+        Text = "校园 Wi-Fi 助手";
+        AutoScaleMode = AutoScaleMode.Dpi;
+        ClientSize = new Size(1280, 860);
+        MinimumSize = new Size(996, 739);
+        StartPosition = FormStartPosition.CenterScreen;
+        if (startInTray) { WindowState = FormWindowState.Minimized; ShowInTaskbar = false; }
+        BackColor = Color.White;
+        Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application;
+        Controls.Add(shell);
+        portal.View.Dock = DockStyle.None;
+        portal.View.Visible = false;
+        Controls.Add(portal.View);
+        var menu = new ContextMenuStrip();
+        menu.Items.Add("打开主窗口", null, (_, _) => RestoreWindow());
+        menu.Items.Add("暂停自动连接", null, (_, _) => Pause());
+        menu.Items.Add("退出", null, (_, _) => { exiting = true; Close(); });
+        tray = new NotifyIcon { Icon = Icon, Text = "校园 Wi-Fi 助手", Visible = true, ContextMenuStrip = menu };
+        tray.DoubleClick += (_, _) => RestoreWindow();
+        FormClosing += (_, e) => {
+            if (!exiting && e.CloseReason == CloseReason.UserClosing) {
+                e.Cancel = true; Hide();
+                tray.ShowBalloonTip(2500, "校园 Wi-Fi 助手", "程序保留在系统托盘，右键图标可暂停或退出。", ToolTipIcon.Info);
+            }
+        };
+        FormClosed += (_, _) => {
+            timer.Stop(); timer.Dispose(); tray.Dispose();
+            portal.View.Dispose(); shell.Dispose();
+        };
+        portal.Status += message => { portalStatus = message; Record(message); UpdatePortalVisibility(); };
+        portal.AddressChanged += () => PushState();
+        portal.Submitted += async () => {
+            var expected = generation;
+            await Task.Delay(1000);
+            if (!IsDisposed && expected == generation) await SafeAsync(() => CheckInternetAsync(false));
+        };
+        timer.Tick += async (_, _) => await RefreshAsync(scan: currentSsid != saved.Ssid);
+        Activated += (_, _) => { if (uiReady) PushStartup(); };
+        Shown += async (_, _) => {
+            if (startInTray) Hide();
+            // Overlap disk/DPAPI work with the WebView2 runtime startup.
+            configurationLoad = verificationPath is null ? Task.Run(LocalStore.Load) : Task.FromResult((new CampusProfile(), ""));
+            try { await InitializeShellAsync(); }
+            catch (WebView2RuntimeNotFoundException) {
+                MessageBox.Show(this, "缺少 Microsoft Edge WebView2 组件。请联网后重新运行安装程序，完成组件安装再打开应用。", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                exiting = true; Close();
+            }
+            catch (Exception ex) {
+                MessageBox.Show(this, "界面启动失败：" + ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                exiting = true; Close();
+            }
+        };
+    }
+
+    private Task<CoreWebView2Environment> GetBrowserEnvironmentAsync()
+    {
+        Directory.CreateDirectory(LocalStore.DirectoryPath);
+        return browserEnvironment ??= CoreWebView2Environment.CreateAsync(null,
+            Path.Combine(LocalStore.DirectoryPath, "WebView2"), new CoreWebView2EnvironmentOptions("--no-proxy-server"));
+    }
+
+    private async Task InitializeShellAsync()
+    {
+        var environment = await GetBrowserEnvironmentAsync();
+        var options = environment.CreateCoreWebView2ControllerOptions();
+        options.IsInPrivateModeEnabled = true;
+        await shell.EnsureCoreWebView2Async(environment, options);
+        var core = shell.CoreWebView2;
+        core.Settings.AreHostObjectsAllowed = false;
+        core.Settings.AreDevToolsEnabled = false;
+        core.Settings.AreDefaultContextMenusEnabled = false;
+        core.Settings.AreBrowserAcceleratorKeysEnabled = false;
+        core.Settings.IsZoomControlEnabled = false;
+        core.Settings.IsStatusBarEnabled = false;
+        core.Settings.IsPasswordAutosaveEnabled = false;
+        core.Settings.IsGeneralAutofillEnabled = false;
+        core.Settings.IsWebMessageEnabled = true;
+        core.NavigationStarting += (_, e) => { if (!DesktopBridge.IsTrustedSource(e.Uri)) e.Cancel = true; };
+        core.NewWindowRequested += (_, e) => e.Handled = true;
+        core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
+        core.DownloadStarting += (_, e) => e.Cancel = true;
+        using var stream = typeof(MainForm).Assembly.GetManifestResourceStream("CampusConnect.Desktop.html")
+            ?? throw new InvalidOperationException("缺少内置界面。");
+        using var reader = new StreamReader(stream);
+        var bytes = Encoding.UTF8.GetBytes(await reader.ReadToEndAsync());
+        core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
+        core.WebResourceRequested += (_, e) => {
+            var trusted = DesktopBridge.IsTrustedSource(e.Request.Uri);
+            e.Response = environment.CreateWebResourceResponse(
+                new MemoryStream(trusted ? bytes : []), trusted ? 200 : 403, trusted ? "OK" : "Forbidden",
+                "Content-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff");
+        };
+        core.WebMessageReceived += async (_, e) => {
+            // This bridge belongs ONLY to the embedded application UI, never the school browser.
+            if (!DesktopBridge.IsTrustedSource(e.Source) || e.WebMessageAsJson.Length > 65536) return;
+            await SafeAsync(async () => {
+                using var document = JsonDocument.Parse(e.WebMessageAsJson);
+                await HandleCommandAsync(document.RootElement);
+            });
+        };
+        core.ProcessFailed += (_, _) => {
+            if (IsDisposed) return;
+            MessageBox.Show(this, "界面进程意外退出，请从托盘退出后重新打开程序。", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+        };
+        core.Navigate(DesktopBridge.Uri);
+    }
+
+    private async Task HandleCommandAsync(JsonElement message)
+    {
+        if (!message.TryGetProperty("command", out var property)) return;
+        switch (property.GetString()) {
+            case "ready":
+                if (uiReady) break;
+                try { if (configurationLoad is not null) (saved, savedPassword) = await configurationLoad; }
+                catch (Exception ex) { Record("无法读取配置，请重新填写并保存：" + ex.Message); }
+                uiReady = true; PushProfile(); PushStartup(); PushState();
+                if (verificationPath is not null) {
+                    var result = await shell.CoreWebView2.ExecuteScriptAsync("JSON.stringify({pageCount:document.querySelectorAll('.nav button').length,title:document.title,passwordMasked:document.getElementById('password').type==='password',startupToggle:!!document.getElementById('startup'),byYe:document.querySelector('.author').textContent})");
+                    var snapshot = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(JsonSerializer.Deserialize<string>(result) ?? "{}") ?? [];
+                    snapshot["mainWindowVisible"] = JsonSerializer.SerializeToElement(Visible);
+                    snapshot["showInTaskbar"] = JsonSerializer.SerializeToElement(ShowInTaskbar);
+                    File.WriteAllText(verificationPath, JsonSerializer.Serialize(snapshot));
+                    exiting = true; Close(); return;
+                }
+                timer.Start();
+                // Show the OS's existing Wi-Fi snapshot first, then refresh it.
+                await RefreshAsync(scan: false);
+                await RefreshAsync(); break;
+            case "page":
+                var next = message.GetProperty("page").GetString();
+                if (next is "dashboard" or "settings" or "portal") {
+                    page = next;
+                    pageTransitioning = message.TryGetProperty("transitioning", out var transition) && transition.ValueKind == JsonValueKind.True;
+                    UpdatePortalVisibility();
+                }
+                break;
+            case "portalBounds":
+                var requestedPage = message.GetProperty("page").GetString();
+                if (requestedPage != page) break;
+                var bounds = DesktopBridge.ScaleBounds(message, ClientSize.Width, ClientSize.Height);
+                if (bounds is { } value) portalBounds = new(value.X, value.Y, value.Width, value.Height);
+                UpdatePortalVisibility(); break;
+            case "refresh": await RefreshAsync(); break;
+            case "connect": await ManualConnectAsync(); break;
+            case "save": SaveFromMessage(message); break;
+            case "setAutomatic":
+                if (!message.GetProperty("enabled").GetBoolean()) Pause();
+                else SaveFromMessage(message, enable: true);
+                break;
+            case "openPortal": await OpenPortalAsync(); break;
+            case "discoverPortal": await OpenPortalAsync(discover: true); break;
+            case "stopPortal": portal.Stop(); portalStatus = "认证已暂停。"; PushState(); UpdatePortalVisibility(); break;
+            case "checkInternet": await CheckInternetAsync(false); break;
+            case "adoptAddress":
+                var url = portal.Address;
+                if (CampusProfile.Origin(url) is null) throw new InvalidOperationException("当前没有可保存的认证网址。");
+                Post(new { kind = "address", address = url });
+                Record("请确认网址属于学校，点击保存后生效。");
+                break;
+            case "setStartup":
+                try {
+                    startup.SetEnabled(message.GetProperty("enabled").GetBoolean());
+                    Record(startup.IsEnabled() ? "开机自启已开启，登录 Windows 后在托盘运行。" : "开机自启已关闭。");
+                } finally { PushStartup(); }
+                break;
+            case "location": OpenSettings("ms-settings:privacy-location"); break;
+            case "wifiSettings": OpenSettings("ms-settings:network-wifi"); break;
+        }
+    }
+
+    private void UpdatePortalVisibility()
+    {
+        if (IsDisposed) return;
+        var show = page == "portal" && !pageTransitioning && portal.IsActive && portalBounds.Width > 0 && portalBounds.Height > 0;
+        if (show) {
+            if (portal.View.Bounds != portalBounds) portal.View.Bounds = portalBounds;
+            if (!portal.View.Visible) portal.View.BringToFront();
+        }
+        if (portal.View.Visible != show) portal.View.Visible = show;
+    }
+    private void Post(object message)
+    {
+        if (!uiReady || IsDisposed || shell.CoreWebView2 is null || !DesktopBridge.IsTrustedSource(shell.CoreWebView2.Source)) return;
+        shell.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(message, JsonOptions));
+    }
+    private void PushStartup()
+    {
+        try { Post(new { kind = "startup", enabled = startup.IsEnabled(), available = true }); }
+        catch (Exception ex) { Post(new { kind = "startup", enabled = false, available = false, error = "无法读取启动项：" + ex.Message }); }
+    }
+    private void PushProfile() => Post(new { kind = "profile", profile = saved, password = savedPassword });
+    private void PushState()
+    {
+        if (!uiReady || IsDisposed || Disposing || !IsHandleCreated || stateQueued) return;
+        // Several updates in one command should render a single final snapshot.
+        stateQueued = true;
+        BeginInvoke((Action)(() => {
+            stateQueued = false;
+            if (!IsDisposed && !Disposing) SendState();
+        }));
+    }
+    private void SendState()
+    {
+        var connected = currentSsid == saved.Ssid;
+        var title = joining ? "正在连接校园网" : permissionNeeded ? "等待 Wi-Fi 访问授权" :
+            connected ? (online == true ? "校园网已连接 · 可上网" : recovery.State == InternetStatus.Captive ? "Wi-Fi 已连接 · 待认证" : "Wi-Fi 已连接 · 正在确认上网状态") :
+            currentSsid is null ? "当前未连接 Wi-Fi" : "已连接 " + currentSsid;
+        Post(new { kind = "state", state = new {
+            target = saved.Ssid, currentSsid, campusConnected = connected, internetOnline = connected && online == true, connectionTitle = title,
+            automatic = saved.Automatic, busy, permissionNeeded, lastScan, status,
+            portalStatus, portalAddress = portal.Address,
+            networks = networks.DistinctBy(n => n.Ssid).Select(n => new { n.Ssid, n.Signal, n.Secure }).ToArray()
+        }});
+    }
+    private void Navigate(string target) { page = target; UpdatePortalVisibility(); Post(new { kind = "page", page = target }); }
+    private void SaveFromMessage(JsonElement message, bool? enable = null)
+    {
+        if (busy) { Record("正在扫描或连接，请稍候再保存。"); PushState(); return; }
+        var draft = message.GetProperty("profile").Deserialize<CampusProfile>(JsonOptions)
+            ?? throw new InvalidOperationException("设置无效。");
+        draft = draft with { Ssid = draft.Ssid.Trim(), PortalUrl = draft.PortalUrl.Trim(), Username = draft.Username.Trim() };
+        if (enable is not null) draft = draft with { Automatic = enable.Value };
+        var secret = message.GetProperty("password").GetString() ?? "";
+        draft.Validate();
+        if (draft.Automatic && draft.PortalEnabled && (draft.Username.Length == 0 || secret.Length == 0))
+            throw new InvalidOperationException("请先填写上网账号和密码，再开启自动连接。");
+        LocalStore.Save(draft, secret);
+        generation++; saved = draft; savedPassword = secret; policy.Reset(); recovery.Reset(); online = null;
+        portal.Stop(); UpdatePortalVisibility(); PushProfile();
+        Record(saved.Automatic ? "设置已保存，自动连接已开启。" : "设置已保存。");
+    }
+    private void Pause()
+    {
+        generation++; recovery.Reset(); saved = saved with { Automatic = false }; portal.Stop(); UpdatePortalVisibility();
+        try { LocalStore.Save(saved, savedPassword); Record("自动连接已暂停。"); }
+        catch (Exception ex) { Record("本次运行已暂停，但保存设置失败：" + ex.Message); }
+    }
+    private void Record(string message)
+    {
+        if (IsDisposed) return;
+        status = message;
+        PushState();
+    }
+    private async Task SafeAsync(Func<Task> action)
+    {
+        try { await action(); }
+        catch (Exception ex) {
+            if (ex.Message.Contains("定位", StringComparison.Ordinal)) permissionNeeded = true;
+            Record(ex.Message);
+        }
+    }
+    private async Task RefreshAsync(bool scan = true)
+    {
+        if (busy || IsDisposed) return;
+        busy = true; PushState();
+        try {
+            await SafeAsync(async () => {
+                var expected = generation;
+                var snapshot = await WifiService.ReadSnapshotAsync(saved.Ssid, scan);
+                if (IsDisposed || expected != generation) return;
+                permissionNeeded = false; networks = snapshot.Networks; lastScan = DateTime.Now.ToString("HH:mm");
+                if (currentSsid != snapshot.Current) {
+                    currentSsid = snapshot.Current; expected = ++generation; recovery.Reset(); online = null;
+                    portal.Stop(); UpdatePortalVisibility();
+                    Record(currentSsid is null ? "Wi-Fi 连接已断开。" : "当前连接：" + currentSsid);
+                }
+                if (snapshot.Current == saved.Ssid) {
+                    policy.Success();
+                    _ = SafeAsync(() => CheckInternetAsync(saved.Automatic));
+                } else if (scan && policy.ShouldJoin(saved.Automatic, saved.Ssid, snapshot.Current, snapshot.Networks.Select(n => n.Ssid), false, DateTimeOffset.UtcNow)) {
+                    await ConnectAsync(snapshot, expected);
+                }
+            });
+        } finally { busy = false; PushState(); }
+    }
+    private async Task ManualConnectAsync()
+    {
+        if (busy) { Record("正在扫描或连接，请稍候。"); return; }
+        busy = true; PushState();
+        try {
+            policy.Reset(); var expected = generation;
+            Record("正在寻找已保存的校园 Wi-Fi…");
+            var snapshot = await WifiService.ReadSnapshotAsync(saved.Ssid);
+            if (expected == generation && !IsDisposed) await ConnectAsync(snapshot, expected, manual: true);
+        } finally { busy = false; PushState(); }
+    }
+    private async Task ConnectAsync(WifiSnapshot snapshot, int expected, bool manual = false)
+    {
+        policy.Begin(DateTimeOffset.UtcNow); joining = true; PushState();
+        try { await WifiService.JoinAsync(saved, snapshot); policy.Success(); }
+        catch (Exception ex) {
+            policy.Fail();
+            throw new InvalidOperationException(ex.Message + (policy.Suspended
+                ? " 连续 3 次连接失败，自动重试已暂停；检查设置后点击立即连接恢复。" : ""), ex);
+        } finally { joining = false; PushState(); }
+        if (expected != generation || IsDisposed) return;
+        currentSsid = saved.Ssid; recovery.Reset(); permissionNeeded = false;
+        Record("已连接校园 Wi-Fi，正在检查上网状态…");
+        await CheckInternetAsync(!manual && saved.Automatic);
+        if (manual && expected == generation && !IsDisposed && saved.PortalEnabled && online != true) await OpenPortalAsync();
+    }
+    private async Task CheckInternetAsync(bool openIfOffline)
+    {
+        if (checking) return;
+        checking = true;
+        try {
+            var expected = generation;
+            var activeProfile = saved;
+            var current = await WifiService.ReadCurrentAsync(activeProfile.Ssid);
+            if (expected != generation || IsDisposed) return;
+            if (current != activeProfile.Ssid) { Record("请先连接校园 Wi-Fi。"); return; }
+            var adapter = await WifiService.ReadInterfaceAsync(activeProfile.Ssid);
+            if (expected != generation || IsDisposed) return;
+            var result = await Connectivity.CheckAsync(adapter);
+            if (expected != generation || IsDisposed) return;
+            current = await WifiService.ReadCurrentAsync(activeProfile.Ssid);
+            if (expected != generation || IsDisposed || current != activeProfile.Ssid) return;
+            online = result == InternetStatus.Online;
+            recovery.Observe(result);
+            if (result == InternetStatus.Online) portal.ConfirmInternetAccess();
+            Record(result == InternetStatus.Online ? "校园 Wi-Fi 互联网检查通过。" :
+                result == InternetStatus.Captive ? "Wi-Fi 已连接，但认证未完成或已失效。" : "Wi-Fi 已连接，尚未确认互联网可用；将继续检查。");
+            if (openIfOffline && !portal.RequiresInteraction && recovery.ShouldAuthenticate(saved.Automatic, saved.PortalEnabled, DateTimeOffset.UtcNow)) {
+                Record("检测到校园网认证失效，正在重新认证…");
+                await OpenPortalAsync(showPage: false);
+            }
+        } finally { checking = false; PushState(); }
+    }
+    private async Task OpenPortalAsync(bool discover = false, bool showPage = true)
+    {
+        if (!saved.PortalEnabled && !discover) { Record("网页认证已关闭，请在设置中开启并保存。"); return; }
+        recovery.Begin(DateTimeOffset.UtcNow);
+        if (showPage) Navigate("portal");
+        await portal.OpenAsync(saved, savedPassword, discover);
+        UpdatePortalVisibility(); PushState();
+    }
+    private static void OpenSettings(string uri) => Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true });
+    private void RestoreWindow() { ShowInTaskbar = true; Show(); WindowState = FormWindowState.Normal; Activate(); }
+}

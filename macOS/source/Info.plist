@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>CampusConnect</string>
+<key>CFBundleIdentifier</key><string>local.campusconnect.mac</string>
+<key>CFBundleName</key><string>CampusConnect</string>
+<key>CFBundleDisplayName</key><string>校园 Wi-Fi 助手</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>1.3.4</string>
+<key>CFBundleVersion</key><string>134</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
+<key>LSMinimumSystemVersion</key><string>14.0</string>
+<key>NSHighResolutionCapable</key><true/>
+<key>NSLocalNetworkUsageDescription</key><string>通过 Wi-Fi 直接访问学校的本地认证服务器，以完成校园网上网登录。</string>
+<key>NSLocationUsageDescription</key><string>用于读取当前及附近 Wi-Fi 名称，识别 HNPI-STU 并自动连接校园网。</string>
+<key>NSLocationWhenInUseUsageDescription</key><string>用于读取当前及附近 Wi-Fi 名称，识别并自动连接已设置的校园网。</string>
+<key>NSAppTransportSecurity</key><dict>
+<key>NSAllowsArbitraryLoadsInWebContent</key><true/>
+<key>NSExceptionDomains</key><dict>
+<key>captive.apple.com</key><dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict>
+<key>www.msftconnecttest.com</key><dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict>
+</dict></dict>
+</dict></plist>
