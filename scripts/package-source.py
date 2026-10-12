@@ -14,6 +14,7 @@ for folder in ("macOS/source", "Windows/source", "Windows/tests", "Windows/insta
             if path.suffix in {".swift", ".cs", ".csproj", ".js", ".mjs", ".cjs", ".html", ".sh", ".ps1", ".py", ".yml", ".plist", ".icns", ".ico", ".manifest", ".nsi", ".txt"}:
                 files.append(path)
 files += [root / path for path in ("macOS/README.md", "macOS/test.sh", "Windows/README.md", "Windows/build.ps1", "Windows/build-installer.ps1")]
+files += sorted((root / "docs" / "screenshots").glob("*.png"))
 with ZipFile(output, "w", ZIP_DEFLATED) as archive:
     for path in sorted(set(files)):
         archive.write(path, path.relative_to(root))

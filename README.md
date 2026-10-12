@@ -7,6 +7,32 @@
 
 分别为 macOS 和 Windows 制作的桌面校园网连接工具。默认校园 Wi-Fi 为 `HNPI-STU`，认证地址为 `http://192.168.0.123`，可在设置中修改。
 
+## 下载
+
+**[Windows 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/v1.3.5/CampusConnect-Windows-x64-1.3.5-Setup.exe)** · **[macOS 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v1.3.5/CampusConnect-macOS-universal-1.3.4.zip)** · [所有发布版本](https://github.com/Ye9137/CampusConnect/releases)
+
+## 界面预览
+
+以下为 Windows 1.3.5 界面预览，展示未连接状态；账号、密码均为空。实际学校认证页面会在连接校园网后加载。
+
+### 网络概览
+
+查看校园 Wi-Fi 状态、附近网络，并控制自动连接。
+
+![Windows 网络概览](docs/screenshots/windows-dashboard.png)
+
+### 校园网设置
+
+配置校园 Wi-Fi、认证地址、账号信息和开机自启。
+
+![Windows 校园网设置](docs/screenshots/windows-settings.png)
+
+### 上网认证
+
+打开学校认证页面，填写登录信息并检查上网状态。
+
+![Windows 上网认证](docs/screenshots/windows-portal.png)
+
 ## Windows 1.3.5 更新
 
 默认打开的窗口内容区域增大为 1280 × 860，仍居中显示并可手动调整。
