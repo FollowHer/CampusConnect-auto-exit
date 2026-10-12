@@ -24,7 +24,7 @@ public static class InstallerWizard {
     public static string LongPath(string path) {
         var result = new StringBuilder(32768);
         uint length = GetLongPathName(path, result, (uint)result.Capacity);
-        if (length == 0 || length >= result.Capacity) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        if (length == 0 || length >= result.Capacity) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "Cannot normalize path: [" + path + "]");
         return result.ToString();
     }
     public delegate bool EnumCallback(IntPtr hwnd, IntPtr context);
@@ -121,6 +121,7 @@ function Install-App([string]$Target, [switch]$Wizard) {
     if ($entry.QuietUninstallString -ne ('"' + $expectedUninstaller + '" /S')) { throw 'The registered silent uninstall command is invalid.' }
     if ((Get-Item $expectedUninstaller).Length -lt 1024) { throw 'Uninstaller is missing or incomplete.' }
     if (-not (Test-Path $desktopShortcut)) { throw 'Desktop shortcut is missing.' }
+    Write-Host ('Shortcut target=' + $shell.CreateShortcut($desktopShortcut).TargetPath + '; expected=' + (Join-Path $Target 'CampusConnect.exe'))
     if ([InstallerWizard]::LongPath($shell.CreateShortcut($desktopShortcut).TargetPath) -ne [InstallerWizard]::LongPath((Join-Path $Target 'CampusConnect.exe'))) { throw 'Shortcut points to the wrong app.' }
     if (-not (Test-Path $menuUninstallShortcut)) { throw 'Start menu uninstall entry is missing.' }
     if ([InstallerWizard]::LongPath($shell.CreateShortcut($menuUninstallShortcut).TargetPath) -ne [InstallerWizard]::LongPath($expectedUninstaller)) { throw 'Start menu uninstall entry points to the wrong file.' }
