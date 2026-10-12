@@ -1,0 +1,25 @@
+name: Test published Windows installer
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-installer:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download published x64 installer and verify checksum
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v1.3.5 --repo $env:GITHUB_REPOSITORY --pattern '*Windows-x64*-Setup.exe' --pattern SHA256SUMS.txt --dir work/release
+          if ($LASTEXITCODE -ne 0) { throw 'Release download failed.' }
+          $installer = Get-ChildItem work/release/*-Setup.exe
+          if (@($installer).Count -ne 1) { throw 'Expected one installer.' }
+          $expected = Get-Content work/release/SHA256SUMS.txt | Where-Object { $_.EndsWith('  ' + $installer.Name) }
+          if (-not $expected -or (Get-FileHash $installer.FullName -Algorithm SHA256).Hash -ne $expected.Split(' ')[0]) { throw 'Installer checksum mismatch.' }
+      - name: Verify install, UI, repair, migration and uninstall
+        shell: pwsh
+        run: ./Windows/installer/smoke-test.ps1 -Installer (Get-ChildItem work/release/*-Setup.exe).FullName

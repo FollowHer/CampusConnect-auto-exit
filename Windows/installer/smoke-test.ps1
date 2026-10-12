@@ -19,6 +19,14 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text;
 public static class InstallerWizard {
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+    private static extern uint GetLongPathName(string path, StringBuilder result, uint capacity);
+    public static string LongPath(string path) {
+        var result = new StringBuilder(32768);
+        uint length = GetLongPathName(path, result, (uint)result.Capacity);
+        if (length == 0 || length >= result.Capacity) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        return result.ToString();
+    }
     public delegate bool EnumCallback(IntPtr hwnd, IntPtr context);
     [DllImport("user32.dll")] public static extern bool EnumWindows(EnumCallback callback, IntPtr context);
     public static IntPtr FindWizard(string title) {
@@ -113,11 +121,11 @@ function Install-App([string]$Target, [switch]$Wizard) {
     if ($entry.QuietUninstallString -ne ('"' + $expectedUninstaller + '" /S')) { throw 'The registered silent uninstall command is invalid.' }
     if ((Get-Item $expectedUninstaller).Length -lt 1024) { throw 'Uninstaller is missing or incomplete.' }
     if (-not (Test-Path $desktopShortcut)) { throw 'Desktop shortcut is missing.' }
-    if ($shell.CreateShortcut($desktopShortcut).TargetPath -ne (Join-Path $Target 'CampusConnect.exe')) { throw 'Shortcut points to the wrong app.' }
+    if ([InstallerWizard]::LongPath($shell.CreateShortcut($desktopShortcut).TargetPath) -ne [InstallerWizard]::LongPath((Join-Path $Target 'CampusConnect.exe'))) { throw 'Shortcut points to the wrong app.' }
     if (-not (Test-Path $menuUninstallShortcut)) { throw 'Start menu uninstall entry is missing.' }
-    if ($shell.CreateShortcut($menuUninstallShortcut).TargetPath -ne $expectedUninstaller) { throw 'Start menu uninstall entry points to the wrong file.' }
+    if ([InstallerWizard]::LongPath($shell.CreateShortcut($menuUninstallShortcut).TargetPath) -ne [InstallerWizard]::LongPath($expectedUninstaller)) { throw 'Start menu uninstall entry points to the wrong file.' }
     if (-not (Test-Path $menuShortcut)) { throw 'Start menu shortcut is missing.' }
-    if ($shell.CreateShortcut($menuShortcut).TargetPath -ne (Join-Path $Target 'CampusConnect.exe')) { throw 'Start menu points to the wrong app.' }
+    if ([InstallerWizard]::LongPath($shell.CreateShortcut($menuShortcut).TargetPath) -ne [InstallerWizard]::LongPath((Join-Path $Target 'CampusConnect.exe'))) { throw 'Start menu points to the wrong app.' }
     $appFiles = @(Get-ChildItem $Target -Recurse -File | Where-Object { $_.Name -ne 'unrelated-user-file.txt' })
     $executables = @($appFiles | Where-Object { $_.Extension -eq '.exe' })
     if ($executables.Count -ne 2 -or ($executables.Name -notcontains 'Uninstall.exe')) { throw 'The installation must contain the app and uninstaller.' }
