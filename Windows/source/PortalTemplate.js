@@ -1,7 +1,13 @@
 (() => {
   const cfg = /*CAMPUS_CONFIG*/;
   if (location.origin !== cfg.origin) return 'wrong-origin';
+  const pending = cfg.confirmSubmit && window.__campusSubmitAttempt;
+  if (pending && pending.failed) return 'submission-unconfirmed';
   if (window.__campusSubmitted) return 'already-submitted';
+  if (pending && pending.handlerStarted) {
+    if (pending.failed || Date.now() - pending.startedAt >= 8000) return 'submission-unconfirmed';
+    return 'waiting-submit';
+  }
   if (document.readyState === 'loading') return 'waiting-ready';
   const ready = window.__campusReady;
   if (ready && (ready.failed || !ready.pageInfo || !ready.getServices)) return 'waiting-ready';
@@ -50,9 +56,11 @@
       }
     }
     if (!editable(input) || !visible(input)) return 'missing-fields';
-    setter.call(input, value);
-    input.dispatchEvent(new Event('input', {bubbles:true}));
-    input.dispatchEvent(new Event('change', {bubbles:true}));
+    if (!cfg.confirmSubmit || input.value !== value) {
+      setter.call(input, value);
+      input.dispatchEvent(new Event('input', {bubbles:true}));
+      input.dispatchEvent(new Event('change', {bubbles:true}));
+    }
   }
   // School handlers can reject/reset a value; never report success or submit it.
   if (!editable(user) || !editable(pass) || !visible(user) || !visible(pass) ||
@@ -66,6 +74,42 @@
     const input = document.querySelector(selector);
     return visible(input) && !input.value.trim();
   })) return 'manual-required';
+  // WKWebView can finish filling before the page handles its first activation.
+  // Observe only the known school's own login flow; never call its API ourselves.
+  if (cfg.confirmSubmit && submit === portalButton && /doauthen/.test(submit.getAttribute('onclick') || '')) {
+    if (typeof window.AuthInterFace?.login !== 'function') return 'waiting-ready';
+    const state = window.__campusSubmitAttempt ||= {clicks:0, prepared:false, handlerStarted:false, failed:false};
+    const observe = (owner, key, flag) => {
+      if (owner[key] === state[key]) return;
+      const original = owner[key];
+      const wrapped = function(...args) {
+        if (flag === 'login') window.__campusSubmitted = true;
+        else { state.handlerStarted = true; state.startedAt = Date.now(); }
+        try { return original.apply(this, args); }
+        catch (error) { state.failed = true; throw error; }
+      };
+      state[key] = wrapped; owner[key] = wrapped;
+    };
+    observe(window, 'doauthen', 'handler');
+    observe(window.AuthInterFace, 'login', 'login');
+    if (!state.prepared || state.button !== submit || state.user !== user || state.pass !== pass) {
+      state.prepared = true; state.button = submit; state.user = user; state.pass = pass;
+      if (document.activeElement === user || document.activeElement === pass) document.activeElement.blur();
+      submit.focus();
+      // Let blur/change handlers and layout finish before rechecking the values.
+      return 'waiting-submit';
+    }
+    if (state.clicks >= 2) return 'submission-unconfirmed';
+    state.clicks++;
+    try {
+      if (state.clicks === 1) submit.click();
+      else submit.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true, view:window}));
+    } catch (_) { state.failed = true; }
+    if (state.failed) return 'submission-unconfirmed';
+    if (window.__campusSubmitted) return 'submitted';
+    // A second activation is allowed only if the school's handler never ran.
+    return 'waiting-submit';
+  }
   window.__campusSubmitted = true;
   submit.click();
   return 'submitted';

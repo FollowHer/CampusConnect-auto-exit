@@ -138,17 +138,29 @@ final class PortalController: NSObject, ObservableObject, WKNavigationDelegate {
             let script = try PortalScript.build(profile: profile, password: password)
             webView.evaluateJavaScript(script) { [weak self] result, error in
                 guard let self, expected == self.generation else { return }
-                if error != nil { self.message = "页面暂不能自动填写，可以在页面手动登录。"; return }
-                switch result as? String {
+                let status = result as? String
+                if PortalFillRetry.shouldRetry(result: status, scriptFailed: error != nil, attempt: attempt) {
+                    self.message = status == "waiting-submit" ? "账号密码已填写，正在等待学校页面处理登录…" : "正在等待认证页面就绪…"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + PortalFillRetry.delay) { [weak self] in
+                        self?.attemptFill(generation: expected, attempt: attempt + 1)
+                    }
+                    return
+                }
+                if error != nil {
+                    self.requiresInteraction = true; self.filled = true; self.password = ""
+                    self.message = "页面脚本暂未就绪，请点击立即认证重试，或在页面手动登录。"; return
+                }
+                switch status {
                 case "submitted", "already-submitted":
                     self.submitted = true; self.password = ""
                     self.message = "已填写并提交，正在检查是否可以上网…"; self.onSubmission?()
                 case "filled": self.requiresInteraction = true; self.filled = true; self.password = ""; self.message = "账号密码已填写，请在页面点击登录。"
-                case "waiting-ready" where attempt < 80, "missing-fields" where attempt < 80, "missing-submit" where attempt < 80:
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.attemptFill(generation: expected, attempt: attempt + 1) }
                 case "missing-submit": self.requiresInteraction = true; self.filled = true; self.password = ""; self.message = "账号密码已填写，未识别登录按钮，请手动点击或设置按钮选择器。"
                 case "manual-required": self.requiresInteraction = true; self.filled = true; self.password = ""; self.message = "学校要求验证码或运营商信息，请在认证页补充。"
-                case "waiting-ready": self.filled = true; self.password = ""; self.message = "学校认证参数尚未就绪，请检查页面后重试。"
+                case "waiting-submit", "submission-unconfirmed":
+                    self.requiresInteraction = true; self.filled = true; self.password = ""
+                    self.message = "学校页面尚未确认提交，请查看页面提示；可点击立即认证重试或手动登录。"
+                case "waiting-ready": self.requiresInteraction = true; self.filled = true; self.password = ""; self.message = "学校认证参数尚未就绪，请检查页面后重试。"
                 case "invalid-selector": self.requiresInteraction = true; self.message = "高级设置中的 CSS 选择器无效，请修正。"
                 case "wrong-origin": self.requiresInteraction = true; self.message = "认证地址不匹配，已暂停填写。"
                 default: self.requiresInteraction = true; self.message = "未识别登录表单，请手动操作，或在高级设置中指定输入框。"

@@ -2,6 +2,14 @@
 
 适用 macOS 14 或更新版本，支持 Apple 芯片和 Intel 芯片。
 
+## 1.4.5 首次自动提交修复
+
+- 首次填写后先完成输入框失焦与按钮准备，再检查并点击学校原有登录按钮。
+- 对已识别 ePortal 页面，确认学校自己的登录处理已启动后才标记为已提交；首次点击没有进入处理函数时补发一次点击事件。
+- 学校处理函数已经执行后不重复点击；异步登录等待确认，遇到验证码或校验提示交给用户处理。
+- 页面刚开始加载时的临时脚本错误继续按间隔重试，不再提前放弃首次提交；就绪等待上限由 80 次调整为 200 次。
+- 新增离线原生 WKWebView 回归测试，使用虚构账号，不请求学校登录接口。
+
 ## 1.4.4 网页认证与连接提速
 
 - 统一使用学校网页自动填写认证，移除开发版接口认证选项；旧版账号、密码及网页设置继续保留。
@@ -28,7 +36,7 @@
 
 ## 安装与使用
 
-1. 下载并解压 `CampusConnect-macOS-universal-1.4.4.zip`。
+1. 下载并解压 `CampusConnect-macOS-universal-1.4.5.zip`。
 2. 将 `CampusConnect.app` 拖到「应用程序」，双击打开。
 3. 此包使用本地临时签名，未经过 Apple Developer ID 签名和公证。若系统拦截，请确认下载来源后，在「系统设置 → 隐私与安全性」中允许打开。
 4. 在应用「网络概览」点击授权定位，允许读取 Wi-Fi 名称。
@@ -48,6 +56,7 @@ zsh macOS/source/build.sh
 
 ```sh
 zsh macOS/test.sh
+zsh macOS/test-webkit.sh
 codesign --verify --deep --strict macOS/CampusConnect.app
 lipo -archs macOS/CampusConnect.app/Contents/MacOS/CampusConnect
 ```

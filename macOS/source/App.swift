@@ -383,7 +383,7 @@ struct RootView: View {
                     Circle().fill(model.campusConnected && model.internet == true ? accent : Color.secondary).frame(width: 6, height: 6)
                     Text(model.status).font(.system(size: 11)).lineLimit(2)
                     Spacer()
-                    Text("v1.4.4 · macOS").font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text("v1.4.5 · macOS").font(.system(size: 10)).foregroundStyle(.secondary)
                 }.padding(.horizontal, 24).padding(.vertical, 12)
             }.background(Color(nsColor: .textBackgroundColor))
         }.frame(minWidth: 980, minHeight: 700).tint(accent).textSelection(.disabled)

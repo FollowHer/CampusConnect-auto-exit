@@ -53,6 +53,12 @@ import JavaScriptCore
         expect(PortalScript.origin(URL(string: "http://example.com:80/login")!) == "http://example.com", "normalize default port")
         expect(PortalScript.origin(URL(string: "https://example.com:8443/login")!) == "https://example.com:8443", "retain distinct port")
 
+        expect(PortalFillRetry.shouldRetry(result: nil, scriptFailed: true, attempt: 0), "first navigation script error retries")
+        expect(PortalFillRetry.shouldRetry(result: "waiting-submit", scriptFailed: false, attempt: 80), "late first submit continues beyond old twelve-second window")
+        expect(!PortalFillRetry.shouldRetry(result: "submission-unconfirmed", scriptFailed: false, attempt: 0), "unconfirmed handler does not get clicked repeatedly")
+        expect(!PortalFillRetry.shouldRetry(result: "manual-required", scriptFailed: false, attempt: 0), "manual challenge is not retried")
+        expect(!PortalFillRetry.shouldRetry(result: nil, scriptFailed: true, attempt: 200), "script retries are bounded")
+
         var policy = AutoPolicy()
         let now = Date()
         expect(policy.shouldJoin(enabled: true, target: "HNPI-STU", current: "Home", visible: ["HNPI-STU"], busy: false, now: now), "connect visible exact target")
