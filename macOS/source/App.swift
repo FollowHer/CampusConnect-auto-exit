@@ -70,13 +70,13 @@ enum Page: String, CaseIterable {
             self?.verifyInternet()
         }
         timer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.refresh() }
+            Task { @MainActor [weak self] in self?.refresh(scan: false) }
         }
         NotificationCenter.default.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.connectionGeneration += 1; self?.recovery.reset(); self?.internet = nil; self?.refresh() }
+            Task { @MainActor [weak self] in self?.connectionGeneration += 1; self?.policy.reset(); self?.recovery.reset(); self?.stopAuthentication(); self?.internet = nil; self?.refresh(scan: false) }
         }
         record("已载入 \(loaded.ssid) 配置。")
-        DispatchQueue.main.async { [weak self] in self?.refresh() }
+        DispatchQueue.main.async { [weak self] in self?.refresh(scan: false) }
     }
 
     var isAuthorized: Bool {
@@ -111,16 +111,16 @@ enum Page: String, CaseIterable {
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         Task { @MainActor in
             self.updatePermission()
-            if self.authorized { self.refresh() }
-            else { self.currentSSID = nil; self.networks = []; self.portal.stop() }
+            if self.authorized { self.refresh(scan: false) }
+            else { self.currentSSID = nil; self.networks = []; self.stopAuthentication() }
         }
     }
 
-    func refresh() {
+    func refresh(scan: Bool = true) {
         guard !scanning, !joining else { return }
         guard authorized else { status = permissionText; return }
         scanning = true
-        wifi.scan { [weak self] result in
+        wifi.scan(preferred: scan ? nil : saved.ssid) { [weak self] result in
             guard let self else { return }
             self.scanning = false
             switch result {
@@ -133,7 +133,7 @@ enum Page: String, CaseIterable {
                 self.lastScan = Date()
                 if before != snapshot.current {
                     self.connectionGeneration += 1; self.recovery.reset(); self.internet = nil; self.authenticated = false
-                    self.portal.stop()
+                    self.stopAuthentication()
                     self.record(snapshot.current.map { "当前连接：\($0)" } ?? "Wi-Fi 连接已断开。")
                 }
                 if !snapshot.powered { self.status = "请先在系统菜单中打开 Wi-Fi。"; return }
@@ -144,7 +144,7 @@ enum Page: String, CaseIterable {
                 } else if self.policy.shouldJoin(enabled: self.automatic, target: self.saved.ssid, current: snapshot.current,
                       visible: snapshot.networks.map(\.ssid), busy: self.joining, now: Date()) {
                     self.connect()
-                } else if self.automatic && !self.policy.suspended {
+                } else if self.automatic {
                     self.status = "正在等待 \(self.saved.ssid)，每 20 秒检查一次。"
                 }
             }
@@ -165,9 +165,9 @@ enum Page: String, CaseIterable {
             try LocalStore.save(profile: profile, secrets: Secrets(wifi: wifiPassword, portal: portalPassword))
             saved = profile; draft = profile; automatic = enable
             policy.reset(); recovery.reset(); connectionGeneration += 1; internet = nil; authenticated = false
-            portal.stop()
+            stopAuthentication()
             record(enable ? "设置已保存，自动连接已开启。" : "设置已保存。")
-            refresh()
+            refresh(scan: false)
             return true
         } catch { record(error.localizedDescription); return false }
     }
@@ -177,7 +177,7 @@ enum Page: String, CaseIterable {
         else {
             automatic = false; saved.automatic = false; draft.automatic = false
             connectionGeneration += 1; recovery.reset()
-            portal.stop()
+            stopAuthentication()
             do { try LocalStore.save(profile: saved); record("自动连接已暂停。") }
             catch { record("自动连接已暂停，但本地设置保存失败：\(error.localizedDescription)") }
         }
@@ -197,12 +197,12 @@ enum Page: String, CaseIterable {
                 self.joining = false
                 switch result {
                 case .success(let ssid):
-                    self.currentSSID = ssid; self.policy.success(); self.recovery.reset(); self.connectionGeneration += 1
+                    self.currentSSID = ssid; self.policy.success(); self.recovery.reset(); self.internet = nil; self.connectionGeneration += 1
                     self.record("已连接 \(ssid)。")
                     if self.automatic || manual { self.verifyInternet(openIfOffline: self.automatic, manual: manual) }
                 case .failure(let error):
                     self.policy.fail()
-                    self.record("连接失败：\(error.localizedDescription)\(self.policy.suspended ? " 连续 3 次失败，已停止自动重试，请检查设置后手动重试。" : "")")
+                    self.record("连接失败：\(error.localizedDescription)\(self.automatic ? " 将继续自动重试，不限制次数。" : "")")
                 }
             }
         } catch { record(error.localizedDescription) }
@@ -213,6 +213,14 @@ enum Page: String, CaseIterable {
         checkingInternet = true
         let expected = connectionGeneration
         let expectedSSID = saved.ssid
+        // Launch the first login immediately; internet verification runs afterwards.
+        if manual && saved.portalEnabled {
+            openPortal()
+        } else if openIfOffline && internet == nil && !portal.requiresInteraction &&
+            recovery.shouldAuthenticate(enabled: automatic, portalEnabled: saved.portalEnabled, now: Date()) {
+            record("正在立即发起校园网认证…")
+            openPortal(showPage: false)
+        }
         Connectivity.check { [weak self] result in
             guard let self else { return }
             self.wifi.readCurrent { [weak self] current in
@@ -225,7 +233,6 @@ enum Page: String, CaseIterable {
                 else {
                     self.authenticated = false
                     self.record(result == .captive ? "Wi-Fi 已连接，但认证未完成或已失效。" : "Wi-Fi 已连接，尚未确认互联网可用；将继续检查。")
-                    if manual && self.saved.portalEnabled { self.openPortal(); return }
                     if openIfOffline && !self.portal.requiresInteraction &&
                         self.recovery.shouldAuthenticate(enabled: self.automatic, portalEnabled: self.saved.portalEnabled, now: Date()) {
                         self.record("检测到校园网认证失效，正在重新认证…")
@@ -234,6 +241,9 @@ enum Page: String, CaseIterable {
                 }
             }
         }
+    }
+    func stopAuthentication() {
+        portal.stop()
     }
     func openPortal(discover: Bool = false, showPage: Bool = true) {
         guard campusConnected else { record("请先连接 \(saved.ssid)。"); return }
@@ -373,7 +383,7 @@ struct RootView: View {
                     Circle().fill(model.campusConnected && model.internet == true ? accent : Color.secondary).frame(width: 6, height: 6)
                     Text(model.status).font(.system(size: 11)).lineLimit(2)
                     Spacer()
-                    Text("v1.3.4 · macOS").font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text("v1.4.4 · macOS").font(.system(size: 10)).foregroundStyle(.secondary)
                 }.padding(.horizontal, 24).padding(.vertical, 12)
             }.background(Color(nsColor: .textBackgroundColor))
         }.frame(minWidth: 980, minHeight: 700).tint(accent).textSelection(.disabled)
@@ -510,7 +520,7 @@ struct RootView: View {
                 }
                 card {
                     VStack(alignment: .leading, spacing: 16) {
-                        Toggle("连接后进行网页认证", isOn: $model.draft.portalEnabled).font(.system(size: 15, weight: .semibold))
+                        Toggle("连接后进行上网认证", isOn: $model.draft.portalEnabled).font(.system(size: 15, weight: .semibold))
                         if model.draft.portalEnabled {
                             field("认证页面地址", text: $model.draft.portalURL, prompt: "http://192.168.0.123")
                             HStack(alignment: .top, spacing: 16) {
@@ -521,7 +531,7 @@ struct RootView: View {
                                 }
                             }
                             Toggle("自动填写后点击登录", isOn: $model.draft.autoSubmit)
-                            DisclosureGroup("高级设置 · 特殊认证页面") {
+                            DisclosureGroup("网页认证高级设置 · 特殊认证页面") {
                                 VStack(alignment: .leading, spacing: 12) {
                                     Text("留空时自动识别。若学校页面包含验证码、运营商选择或特殊表单，可先手动完成，再按页面调整。")
                                         .font(.system(size: 11)).foregroundStyle(.secondary)
@@ -553,7 +563,7 @@ struct PortalPage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Button("打开并填写") { model.openPortal() }.buttonStyle(.borderedProminent).disabled(!model.campusConnected)
+                Button("立即认证") { model.openPortal() }.buttonStyle(.borderedProminent).disabled(!model.campusConnected)
                 Button("探测认证地址") { model.openPortal(discover: true) }.disabled(!model.campusConnected)
                 Button("检查上网状态") { model.verifyInternet() }.disabled(!model.campusConnected)
                 Spacer()

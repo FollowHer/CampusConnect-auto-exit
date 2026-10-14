@@ -18,6 +18,19 @@ import JavaScriptCore
         let reloaded = try LocalStore.load(directory: localDirectory)
         expect(reloaded.profile == storedProfile, "local account and settings persist")
         expect(reloaded.credentials[storedProfile.ssid] == secrets, "local passwords persist")
+        let legacyFile = localDirectory.appendingPathComponent("configuration.json")
+        var legacyJSON = try JSONSerialization.jsonObject(with: Data(contentsOf: legacyFile)) as! [String: Any]
+        var legacyProfile = legacyJSON["profile"] as! [String: Any]
+        legacyProfile["loginMethod"] = "direct"
+        legacyProfile["serviceName"] = "legacy-service"
+        legacyJSON["profile"] = legacyProfile
+        try JSONSerialization.data(withJSONObject: legacyJSON).write(to: legacyFile)
+        let migrated = try LocalStore.load(directory: localDirectory)
+        expect(migrated.profile == storedProfile, "legacy direct settings do not change web settings")
+        expect(migrated.credentials[storedProfile.ssid] == secrets, "legacy direct passwords preserved")
+        let encoded = String(data: try JSONEncoder().encode(migrated.profile), encoding: .utf8)!
+        expect(!encoded.contains("loginMethod") && !encoded.contains("serviceName"), "removed authentication options are not persisted")
+
         let filePermissions = try FileManager.default.attributesOfItem(atPath: localDirectory.appendingPathComponent("configuration.json").path)[.posixPermissions] as? NSNumber
         expect(filePermissions?.intValue == 0o600, "credential file owner-only permissions")
         let directoryPermissions = try FileManager.default.attributesOfItem(atPath: localDirectory.path)[.posixPermissions] as? NSNumber
@@ -49,12 +62,19 @@ import JavaScriptCore
         policy.begin(at: now)
         expect(!policy.shouldJoin(enabled: true, target: "HNPI-STU", current: nil, visible: ["HNPI-STU"], busy: false, now: now.addingTimeInterval(59)), "retry cooldown")
         expect(policy.shouldJoin(enabled: true, target: "HNPI-STU", current: nil, visible: ["HNPI-STU"], busy: false, now: now.addingTimeInterval(61)), "retry after cooldown")
-        policy.fail(); policy.fail(); policy.fail()
-        expect(policy.suspended, "stop after three failures")
+        for i in 1...1000 {
+            policy.fail()
+            let retryAt = now.addingTimeInterval(Double(60 * i))
+            expect(policy.shouldJoin(enabled: true, target: "HNPI-STU", current: nil, visible: ["HNPI-STU"], busy: false, now: retryAt), "Wi-Fi retries without a failure limit")
+            policy.begin(at: retryAt)
+        }
         policy.reset()
-        expect(!policy.suspended, "manual retry resets suspension")
+        expect(policy.shouldJoin(enabled: true, target: "HNPI-STU", current: nil, visible: ["HNPI-STU"], busy: false, now: now), "reset allows immediate connection")
 
         var recovery = PortalRecovery()
+        expect(recovery.shouldAuthenticate(enabled: true, portalEnabled: true, now: now), "first authentication starts before probes or timer ticks")
+        expect(!recovery.shouldAuthenticate(enabled: false, portalEnabled: true, now: now), "startup respects pause")
+        expect(!recovery.shouldAuthenticate(enabled: true, portalEnabled: false, now: now), "startup respects disabled portal")
         recovery.observe(.online)
         expect(!recovery.shouldAuthenticate(enabled: true, portalEnabled: true, now: now), "online does not reauthenticate")
         recovery.observe(.captive)
@@ -73,6 +93,15 @@ import JavaScriptCore
         expect(!recovery.shouldAuthenticate(enabled: true, portalEnabled: true, now: now), "single timeout does not disrupt authentication")
         recovery.observe(.unavailable)
         expect(recovery.shouldAuthenticate(enabled: true, portalEnabled: true, now: now), "repeated failures recover")
+        var authenticationTime = now
+        for _ in 0..<1000 {
+            expect(recovery.shouldAuthenticate(enabled: true, portalEnabled: true, now: authenticationTime), "authentication retries indefinitely")
+            recovery.begin(at: authenticationTime)
+            recovery.observe(.unavailable)
+            authenticationTime = authenticationTime.addingTimeInterval(recovery.retryDelay)
+        }
+        recovery.reset()
+        expect(recovery.shouldAuthenticate(enabled: true, portalEnabled: true, now: now), "new connection resets first authentication delay")
         expect(InternetEvidence.classify(status: 200, body: "<html>Login</html>", expectedBody: "Microsoft Connect Test", sameEndpoint: true) == .captive, "HTTP 200 login is not internet")
         expect(InternetEvidence.classify(status: 302, body: "", expectedBody: "Microsoft Connect Test", sameEndpoint: true) == .captive, "redirect is captive")
         expect(InternetEvidence.classify(status: 204, body: "Microsoft Connect Test", expectedBody: "Microsoft Connect Test", sameEndpoint: true) != .success, "strict status")

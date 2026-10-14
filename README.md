@@ -7,6 +7,13 @@
 
 分别为 macOS 和 Windows 制作的桌面校园网连接工具。默认校园 Wi-Fi 为 `HNPI-STU`，认证地址为 `http://192.168.0.123`，可在设置中修改。
 
+## macOS 1.4.4 更新
+
+- 统一使用网页认证，移除开发版接口认证选项，保留旧版账号密码和网页设置。
+- 同步密码框自动激活及提交前校验；启动后立即尝试连接，已连接校园 Wi-Fi 时跳过全量扫描并提前认证。
+- 失败后持续按间隔重试，减少不必要的等待。兼容 macOS 14+，包含 Apple 芯片和 Intel 两种架构。
+- 已通过核心回归、通用构建与本地签名检查；真实校园网端到端登录和速度仍需实测。
+
 ## Windows 1.4.3 更新
 
 - **修复登录时密码无法自动输入**：处理学校认证页密码提示框未激活的情况，自动触发页面焦点或点击处理，无需先手动点击密码框；提交前检查账号密码确实已写入。
@@ -14,11 +21,11 @@
 - 未连通时持续按间隔重试，直到成功、暂停或退出；验证码等特殊表单仍需手动处理。
 - Windows 统一使用网页认证，移除开发版的接口认证选项，保留已保存的账号密码；同时修复 Windows 显示内部 Wi-Fi 配置名的问题。
 
-本次更新 Windows 安装包至 1.4.3；macOS 继续提供已发布的 1.3.4。已通过核心、浏览器回归和安装包校验，实际连接耗时受校园网络及设备影响；尚未完成新版的真实校园网端到端登录验证。
+Windows 安装包为 1.4.3，macOS 通用包为 1.4.4。已通过核心、浏览器回归和安装包校验，实际连接耗时受校园网络及设备影响；尚未完成新版的真实校园网端到端登录验证。
 
 ## 下载
 
-**[Windows 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/v1.4.3/CampusConnect-Windows-x64-1.4.3-Setup.exe)** · **[macOS 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v1.3.5/CampusConnect-macOS-universal-1.3.4.zip)** · [GitHub 发布版本](https://github.com/Ye9137/CampusConnect/releases) · [Gitee 国内下载](https://gitee.com/lyz9137/CampusConnect/releases)
+**[Windows 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/v1.4.3/CampusConnect-Windows-x64-1.4.3-Setup.exe)** · **[macOS 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v1.4.4/CampusConnect-macOS-universal-1.4.4.zip)** · [GitHub 发布版本](https://github.com/Ye9137/CampusConnect/releases) · [Gitee 国内下载](https://gitee.com/lyz9137/CampusConnect/releases)
 
 ## 界面预览
 
@@ -90,7 +97,7 @@ Windows 安装版提供自定义安装目录、可选桌面快捷方式（默认
 3. 点击「立即连接」，在「上网认证」查看学校网页的结果。
 4. 需要持续运行时，在设置中启用自动连接。关闭窗口后程序留在菜单栏 / 系统托盘；选择「退出」后停止。
 
-自动连接每 20 秒检查一次，仅连接名称完全匹配且可见的 Wi-Fi；两次连接尝试至少间隔 60 秒。Windows 1.4.3 会持续重试直到成功或用户暂停；macOS 1.3.4 连续失败 3 次后暂停，可手动恢复。每次打开认证页最多自动提交一次，避免反复提交错误密码。验证码、运营商选择或多步登录需在页面中手动完成。
+自动连接每 20 秒检查一次，仅连接名称完全匹配且可见的 Wi-Fi；两次连接尝试至少间隔 60 秒。Windows 1.4.3 与 macOS 1.4.4 均持续按间隔重试，直到成功或用户暂停。每次打开认证页最多自动提交一次，避免反复提交错误密码。验证码、运营商选择或多步登录需在页面中手动完成。
 
 认证信息只在当前连接的 Wi-Fi 与设置匹配、网页协议 / 主机 / 端口与保存地址一致时自动填写。学校网页跳转到其他地址时，确认后更新设置再试。
 
@@ -102,7 +109,7 @@ Windows 安装版提供自定义安装目录、可选桌面快捷方式（默认
 
 ## Windows 1.2.4 性能优化
 
-Windows 版将无线扫描、连接和 SSID 检查移到后台；启动时先显示缓存网络，再更新扫描结果。界面仅更新有变化且正在显示的列表，合并状态及认证页位置通知，并复用浏览器环境。启用 ReadyToRun 预编译后，继续保持单文件分发。这段记录描述 1.2.4 的改动；当前 Windows 版本为 1.4.3，macOS 已发布版本为 1.3.4。
+Windows 版将无线扫描、连接和 SSID 检查移到后台；启动时先显示缓存网络，再更新扫描结果。界面仅更新有变化且正在显示的列表，合并状态及认证页位置通知，并复用浏览器环境。启用 ReadyToRun 预编译后，继续保持单文件分发。这段记录描述 1.2.4 的改动；当前 Windows 版本为 1.4.3，macOS 版本为 1.4.4。
 
 ## 1.2.3 认证页适配
 

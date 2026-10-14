@@ -21,6 +21,26 @@ struct CampusProfile: Codable, Equatable {
     var autoSubmit = true
     var automatic = false
 
+    enum CodingKeys: String, CodingKey {
+        case ssid, joinMode, wifiUsername, portalEnabled, portalURL, username
+        case userSelector, passwordSelector, submitSelector, autoSubmit, automatic
+    }
+    init() {}
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        ssid = try values.decodeIfPresent(String.self, forKey: .ssid) ?? "HNPI-STU"
+        joinMode = try values.decodeIfPresent(JoinMode.self, forKey: .joinMode) ?? .open
+        wifiUsername = try values.decodeIfPresent(String.self, forKey: .wifiUsername) ?? ""
+        portalEnabled = try values.decodeIfPresent(Bool.self, forKey: .portalEnabled) ?? true
+        portalURL = try values.decodeIfPresent(String.self, forKey: .portalURL) ?? "http://192.168.0.123"
+        username = try values.decodeIfPresent(String.self, forKey: .username) ?? ""
+        userSelector = try values.decodeIfPresent(String.self, forKey: .userSelector) ?? ""
+        passwordSelector = try values.decodeIfPresent(String.self, forKey: .passwordSelector) ?? ""
+        submitSelector = try values.decodeIfPresent(String.self, forKey: .submitSelector) ?? ""
+        autoSubmit = try values.decodeIfPresent(Bool.self, forKey: .autoSubmit) ?? true
+        automatic = try values.decodeIfPresent(Bool.self, forKey: .automatic) ?? false
+    }
+
     var validPortalURL: URL? {
         guard let url = URL(string: portalURL), let scheme = url.scheme?.lowercased(),
               ["http", "https"].contains(scheme), url.host != nil,
@@ -86,13 +106,12 @@ enum LocalStore {
 struct AutoPolicy {
     var lastAttempt = Date.distantPast
     var failures = 0
-    var suspended: Bool { failures >= 3 }
     func shouldJoin(enabled: Bool, target: String, current: String?, visible: [String], busy: Bool, now: Date) -> Bool {
-        enabled && !target.isEmpty && current != target && visible.contains(target) && !busy && !suspended && now.timeIntervalSince(lastAttempt) >= 60
+        enabled && !target.isEmpty && current != target && visible.contains(target) && !busy && now.timeIntervalSince(lastAttempt) >= 60
     }
     mutating func begin(at date: Date) { lastAttempt = date }
     mutating func success() { failures = 0 }
-    mutating func fail() { failures += 1 }
+    mutating func fail() { if failures < Int.max { failures += 1 } }
     mutating func reset() { failures = 0; lastAttempt = .distantPast }
 }
 
@@ -122,7 +141,7 @@ struct PortalRecovery {
         else { state = result; failures = min(2, failures + 1) }
     }
     func shouldAuthenticate(enabled: Bool, portalEnabled: Bool, now: Date) -> Bool {
-        enabled && portalEnabled && state != .online && (state == .captive || failures >= 2)
+        enabled && portalEnabled && state != .online && ((attempts == 0 && failures == 0) || state == .captive || failures >= 2)
             && now.timeIntervalSince(lastAttempt) >= retryDelay
     }
     mutating func begin(at now: Date) { lastAttempt = now; attempts = min(4, attempts + 1) }

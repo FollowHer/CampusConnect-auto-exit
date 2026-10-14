@@ -154,3 +154,13 @@
 - Windows 原生注册表检查在 macOS 上跳过；尚未使用真实校园账号在 Windows WebView2 上完成端到端登录验证。
 - 仅同步 macOS 的共享表单脚本以维持跨平台测试一致；此次没有发布新的 macOS 安装包。
 - 公开发布源码从原 main 单独整理，仅包含 Windows 更新与共享表单脚本；该源码再次通过 Windows 2079 项、基础脚本 18 项、ePortal Chromium 回归及 macOS 51 项检查。
+
+
+## macOS 1.4.4（2026-10-14）
+
+- 移除开发版接口认证路径和选项，保留网页认证；旧配置迁移及密码保留检查通过。
+- 2057 项 Swift 核心检查通过，涵盖立即认证、持续重试、冷却、配置迁移与 JavaScript 执行。
+- 18 项基础网页脚本检查、ePortal DOM 回归及 Mac/Windows 内嵌脚本一致性检查通过。
+- arm64 + x86_64 优化构建成功；Info.plist、通用架构、本地临时签名严格验证通过。
+- 未完成真实校园网 WKWebView 登录、Intel 实机及连接耗时测量；未作 Apple Developer ID 签名与公证。
+- Windows 仍为 1.4.3；此前安装向导自动化失败的状态未因本次 Mac 更新而改变。

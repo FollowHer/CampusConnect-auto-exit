@@ -24,12 +24,15 @@ final class WiFiService {
             DispatchQueue.main.async { completion(ssid) }
         }
     }
-    func scan(completion: @escaping (Result<WiFiSnapshot, Error>) -> Void) {
+    func scan(preferred: String? = nil, completion: @escaping (Result<WiFiSnapshot, Error>) -> Void) {
         queue.async {
             let result: Result<WiFiSnapshot, Error> = Result {
                 guard let interface = CWWiFiClient.shared().interface() else { throw AppError.message("未找到 Wi-Fi 接口。") }
                 guard interface.powerOn() else { return WiFiSnapshot(current: nil, powered: false, networks: [], hiddenCount: 0) }
-                let networks = try interface.scanForNetworks(withSSID: nil)
+                // An existing campus connection can authenticate without a full radio scan.
+                let networks = preferred != nil && interface.ssid() == preferred
+                    ? (interface.cachedScanResults() ?? [])
+                    : try interface.scanForNetworks(withSSID: nil)
                 var unique: [String: VisibleNetwork] = [:]
                 var hidden = 0
                 for n in networks {
