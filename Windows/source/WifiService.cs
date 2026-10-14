@@ -94,6 +94,22 @@ internal sealed class WifiService : IDisposable
                     if (n.Ssid.Length > 0) networks.Add(new(id, n.Ssid.Text, n.ProfileName, n.Signal, n.SecurityEnabled != 0, n.Connectable != 0));
             } finally { WlanFreeMemory(pointer); }
         }
+        // Older releases exposed an internal hex-based profile name in Windows.
+        // Rename only our legacy open profile for the selected SSID. Keep the
+        // connection and profile contents intact; a conflict/denial is cosmetic
+        // and must not prevent scanning or authentication.
+        if (!string.IsNullOrEmpty(preferred)) {
+            var legacy = "CampusConnect-" + Convert.ToHexString(Encoding.UTF8.GetBytes(preferred));
+            foreach (var idValue in networks.Where(n => n.Ssid == preferred && !n.Secure && n.ProfileName == legacy)
+                         .Select(n => n.InterfaceId).Distinct().ToList()) {
+                if (networks.Any(n => n.InterfaceId == idValue && n.ProfileName == preferred)) continue;
+                var id = idValue;
+                if (WlanRenameProfile(handle, ref id, legacy, preferred, IntPtr.Zero) != 0) continue;
+                for (var i = 0; i < networks.Count; i++)
+                    if (networks[i].InterfaceId == id && networks[i].ProfileName == legacy)
+                        networks[i] = networks[i] with { ProfileName = preferred };
+            }
+        }
         return new(CurrentSsid(preferred), networks.OrderByDescending(n => n.Signal).ToList());
     }
     public async Task ConnectAsync(CampusProfile profile, WifiSnapshot snapshot)
@@ -108,8 +124,11 @@ internal sealed class WifiService : IDisposable
         string profileName;
         if (profile.UseSavedWifiProfile) profileName = network.ProfileName;
         else {
-            profileName = "CampusConnect-" + Convert.ToHexString(Encoding.UTF8.GetBytes(profile.Ssid));
-            Check(WlanSetProfile(handle, ref id, 2, OpenProfileXml(profile.Ssid), null, true, IntPtr.Zero, out _));
+            profileName = profile.Ssid;
+            // Reuse a matching open profile; never overwrite a user's saved
+            // profile just because its display name matches the target SSID.
+            if (!matches.Any(n => n.InterfaceId == id && !n.Secure && n.ProfileName == profileName))
+                Check(WlanSetProfile(handle, ref id, 2, OpenProfileXml(profile.Ssid), null, false, IntPtr.Zero, out _));
         }
         var parameters = new ConnectionParameters { Mode = 0, Profile = profileName, BssType = 1 };
         Check(WlanConnect(handle, ref id, ref parameters, IntPtr.Zero));
@@ -125,7 +144,7 @@ internal sealed class WifiService : IDisposable
         return $"""
             <?xml version="1.0"?>
             <WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
-              <name>CampusConnect-{hex}</name>
+              <name>{SecurityElement.Escape(ssid)}</name>
               <SSIDConfig><SSID><hex>{hex}</hex><name>{SecurityElement.Escape(ssid)}</name></SSID></SSIDConfig>
               <connectionType>ESS</connectionType><connectionMode>manual</connectionMode>
               <MSM><security><authEncryption><authentication>open</authentication><encryption>none</encryption><useOneX>false</useOneX></authEncryption></security></MSM>
@@ -194,4 +213,5 @@ internal sealed class WifiService : IDisposable
     [DllImport("wlanapi.dll")] private static extern uint WlanGetAvailableNetworkList(IntPtr handle, ref Guid id, uint flags, IntPtr reserved, out IntPtr list);
     [DllImport("wlanapi.dll", CharSet = CharSet.Unicode)] private static extern uint WlanSetProfile(IntPtr handle, ref Guid id, uint flags, string xml, string? security, [MarshalAs(UnmanagedType.Bool)] bool overwrite, IntPtr reserved, out uint reason);
     [DllImport("wlanapi.dll", CharSet = CharSet.Unicode)] private static extern uint WlanConnect(IntPtr handle, ref Guid id, ref ConnectionParameters parameters, IntPtr reserved);
+    [DllImport("wlanapi.dll", CharSet = CharSet.Unicode)] private static extern uint WlanRenameProfile(IntPtr handle, ref Guid id, string oldName, string newName, IntPtr reserved);
 }

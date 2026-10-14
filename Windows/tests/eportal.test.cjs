@@ -48,6 +48,40 @@ document.getElementById('loginLink').onclick = () => clicks++;
     assert.equal(await page.evaluate(script()), 'already-submitted');
     assert.equal(await page.evaluate(()=>clicks),1);
     assert.deepEqual(await page.evaluate(()=>events),['username:input','username:change','pwd:input','pwd:change']);
+    // An inactive/hidden WebView can fail to deliver native focus events.
+    await reset();
+    await page.evaluate(() => {
+      for (const id of ['username_tip','pwd_tip']) document.getElementById(id).focus = () => {};
+    });
+    assert.equal(await page.evaluate(script()), 'submitted');
+    assert.equal(await page.locator('#pwd').inputValue(), cfg.password);
+    assert.equal(await page.evaluate(() => clicks), 1);
+    assert.equal(await page.evaluate(script()), 'already-submitted');
+    // Some portal variants reveal the password only from a click handler.
+    await reset();
+    await page.evaluate(() => {
+      const tip = document.getElementById('pwd_tip');
+      tip.onclick = tip.onfocus; tip.onfocus = null;
+    });
+    assert.equal(await page.evaluate(script()), 'submitted');
+    assert.equal(await page.locator('#pwd').inputValue(), cfg.password);
+    assert.equal(await page.evaluate(() => clicks), 1);
+    // Delegated focus handlers must also work without native focus.
+    await reset();
+    await page.evaluate(() => {
+      const tip = document.getElementById('pwd_tip'), activate = tip.onfocus;
+      tip.onfocus = null; tip.focus = () => {};
+      document.addEventListener('focusin', event => { if (event.target === tip) activate(); });
+    });
+    assert.equal(await page.evaluate(script()), 'submitted');
+    assert.equal(await page.locator('#pwd').inputValue(), cfg.password);
+    // Do not submit if school input handlers discard the supplied password.
+    await reset();
+    await page.locator('#pwd').evaluate(input => input.onchange = () => { input.value = ''; });
+    assert.equal(await page.evaluate(script()), 'missing-fields');
+    assert.equal(await page.evaluate(() => clicks), 0);
+    await page.locator('#pwd').evaluate(input => input.onchange = null);
+    assert.equal(await page.evaluate(script()), 'submitted');
     await reset();
     assert.equal(await page.evaluate(script({submit:false})), 'filled');
     assert.equal(await page.evaluate(()=>clicks),0);

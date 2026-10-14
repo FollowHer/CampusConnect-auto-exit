@@ -40,7 +40,7 @@ internal static class Connectivity
         } catch (HttpRequestException) { return ProbeOutcome.Unavailable; }
         catch (OperationCanceledException) { return ProbeOutcome.Unavailable; }
     }
-    private static async ValueTask<Stream> ConnectThroughWifiAsync(NetworkInterface nic, DnsEndPoint endpoint, CancellationToken cancellation)
+    internal static async ValueTask<Stream> ConnectThroughWifiAsync(NetworkInterface nic, DnsEndPoint endpoint, CancellationToken cancellation)
     {
         var properties = nic.GetIPProperties();
         var addresses = await Dns.GetHostAddressesAsync(endpoint.Host, cancellation);

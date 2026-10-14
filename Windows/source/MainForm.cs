@@ -161,9 +161,9 @@ internal sealed class MainForm : Form
                     exiting = true; Close(); return;
                 }
                 timer.Start();
-                // Show the OS's existing Wi-Fi snapshot first, then refresh it.
+                // Connect immediately from the WLAN cache when the target is already visible.
                 await RefreshAsync(scan: false);
-                await RefreshAsync(); break;
+                if (currentSsid != saved.Ssid) await RefreshAsync(); break;
             case "page":
                 var next = message.GetProperty("page").GetString();
                 if (next is "dashboard" or "settings" or "portal") {
@@ -187,7 +187,7 @@ internal sealed class MainForm : Form
                 break;
             case "openPortal": await OpenPortalAsync(); break;
             case "discoverPortal": await OpenPortalAsync(discover: true); break;
-            case "stopPortal": portal.Stop(); portalStatus = "认证已暂停。"; PushState(); UpdatePortalVisibility(); break;
+            case "stopPortal": StopAuthentication(); portalStatus = "认证已暂停。"; PushState(); UpdatePortalVisibility(); break;
             case "checkInternet": await CheckInternetAsync(false); break;
             case "adoptAddress":
                 var url = portal.Address;
@@ -264,12 +264,13 @@ internal sealed class MainForm : Form
             throw new InvalidOperationException("请先填写上网账号和密码，再开启自动连接。");
         LocalStore.Save(draft, secret);
         generation++; saved = draft; savedPassword = secret; policy.Reset(); recovery.Reset(); online = null;
-        portal.Stop(); UpdatePortalVisibility(); PushProfile();
+        StopAuthentication(); UpdatePortalVisibility(); PushProfile();
         Record(saved.Automatic ? "设置已保存，自动连接已开启。" : "设置已保存。");
+        if (saved.Automatic) _ = RefreshAsync(scan: false);
     }
     private void Pause()
     {
-        generation++; recovery.Reset(); saved = saved with { Automatic = false }; portal.Stop(); UpdatePortalVisibility();
+        generation++; recovery.Reset(); saved = saved with { Automatic = false }; StopAuthentication(); UpdatePortalVisibility();
         try { LocalStore.Save(saved, savedPassword); Record("自动连接已暂停。"); }
         catch (Exception ex) { Record("本次运行已暂停，但保存设置失败：" + ex.Message); }
     }
@@ -299,13 +300,13 @@ internal sealed class MainForm : Form
                 permissionNeeded = false; networks = snapshot.Networks; lastScan = DateTime.Now.ToString("HH:mm");
                 if (currentSsid != snapshot.Current) {
                     currentSsid = snapshot.Current; expected = ++generation; recovery.Reset(); online = null;
-                    portal.Stop(); UpdatePortalVisibility();
+                    StopAuthentication(); UpdatePortalVisibility();
                     Record(currentSsid is null ? "Wi-Fi 连接已断开。" : "当前连接：" + currentSsid);
                 }
                 if (snapshot.Current == saved.Ssid) {
                     policy.Success();
                     _ = SafeAsync(() => CheckInternetAsync(saved.Automatic));
-                } else if (scan && policy.ShouldJoin(saved.Automatic, saved.Ssid, snapshot.Current, snapshot.Networks.Select(n => n.Ssid), false, DateTimeOffset.UtcNow)) {
+                } else if (policy.ShouldJoin(saved.Automatic, saved.Ssid, snapshot.Current, snapshot.Networks.Select(n => n.Ssid), false, DateTimeOffset.UtcNow)) {
                     await ConnectAsync(snapshot, expected);
                 }
             });
@@ -328,14 +329,14 @@ internal sealed class MainForm : Form
         try { await WifiService.JoinAsync(saved, snapshot); policy.Success(); }
         catch (Exception ex) {
             policy.Fail();
-            throw new InvalidOperationException(ex.Message + (policy.Suspended
-                ? " 连续 3 次连接失败，自动重试已暂停；检查设置后点击立即连接恢复。" : ""), ex);
+            throw new InvalidOperationException(ex.Message + (saved.Automatic
+                ? " 将继续自动重试，不限制次数。" : ""), ex);
         } finally { joining = false; PushState(); }
         if (expected != generation || IsDisposed) return;
-        currentSsid = saved.Ssid; recovery.Reset(); permissionNeeded = false;
+        currentSsid = saved.Ssid; recovery.Reset(); online = null; permissionNeeded = false;
         Record("已连接校园 Wi-Fi，正在检查上网状态…");
+        if (manual && saved.PortalEnabled) await OpenPortalAsync();
         await CheckInternetAsync(!manual && saved.Automatic);
-        if (manual && expected == generation && !IsDisposed && saved.PortalEnabled && online != true) await OpenPortalAsync();
     }
     private async Task CheckInternetAsync(bool openIfOffline)
     {
@@ -347,6 +348,13 @@ internal sealed class MainForm : Form
             var current = await WifiService.ReadCurrentAsync(activeProfile.Ssid);
             if (expected != generation || IsDisposed) return;
             if (current != activeProfile.Ssid) { Record("请先连接校园 Wi-Fi。"); return; }
+            // Start the first login before waiting for external internet probes.
+            if (openIfOffline && online is null && !portal.RequiresInteraction &&
+                recovery.ShouldAuthenticate(saved.Automatic, saved.PortalEnabled, DateTimeOffset.UtcNow)) {
+                Record("正在立即发起校园网认证…");
+                await OpenPortalAsync(showPage: false);
+                if (expected != generation || IsDisposed) return;
+            }
             var adapter = await WifiService.ReadInterfaceAsync(activeProfile.Ssid);
             if (expected != generation || IsDisposed) return;
             var result = await Connectivity.CheckAsync(adapter);
@@ -363,6 +371,10 @@ internal sealed class MainForm : Form
                 await OpenPortalAsync(showPage: false);
             }
         } finally { checking = false; PushState(); }
+    }
+    private void StopAuthentication()
+    {
+        portal.Stop();
     }
     private async Task OpenPortalAsync(bool discover = false, bool showPage = true)
     {

@@ -72,6 +72,7 @@ button{transition:background-color .16s,color .16s,box-shadow .16s,transform .16
 .card{transition:border-color .2s,box-shadow .2s}.card:hover{border-color:color-mix(in srgb,var(--accent) 25%,var(--line));box-shadow:0 4px 16px #00000005}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 .nav::before{transition:none!important}
+select {font:inherit;border:1px solid var(--border,#ddd);border-radius:8px;padding:10px;background:var(--card,#fff);color:inherit;}
 </style>
 </head>
 <body>
@@ -110,12 +111,12 @@ button{transition:background-color .16s,color .16s,box-shadow .16s,transform .16
           <button id="wifi-settings" data-action="wifiSettings" style="align-self:flex-start" hidden>打开 Windows Wi-Fi 设置</button>
         </div>
         <div class="card stack">
-          <div class="row between"><h3 style="margin:0">连接后进行网页认证</h3><input id="portalEnabled" class="toggle" type="checkbox" aria-label="连接后进行网页认证" checked></div>
+          <div class="row between"><h3 style="margin:0">连接后进行上网认证</h3><input id="portalEnabled" class="toggle" type="checkbox" aria-label="连接后进行上网认证" checked></div>
           <div id="portal-fields" class="stack">
             <label class="field">认证页面地址<input id="portalUrl" placeholder="http://192.168.0.123" value="http://192.168.0.123" autocomplete="off"></label>
             <div class="field-row"><label class="field">学号 / 上网账号<input id="username" placeholder="输入账号" autocomplete="off"></label><label class="field">上网密码<input id="password" type="password" placeholder="输入上网密码" autocomplete="new-password"></label></div>
-            <label class="check"><input id="autoSubmit" type="checkbox" checked>自动填写后点击登录</label>
-            <details><summary>高级设置 · 特殊认证页面</summary><div class="advanced stack">
+            <label class="check" id="browser-submit"><input id="autoSubmit" type="checkbox" checked>自动填写后点击登录</label>
+            <details id="browser-advanced"><summary>高级设置 · 特殊认证页面</summary><div class="advanced stack">
               <div class="description">留空时自动识别。若学校页面包含验证码、运营商选择或特殊表单，可先手动完成，再按页面调整。</div>
               <label class="field">账号输入框 CSS 选择器<input id="userSelector" placeholder="例如 #username" autocomplete="off"></label>
               <label class="field">密码输入框 CSS 选择器<input id="passwordSelector" placeholder="例如 #password" autocomplete="off"></label>
@@ -128,13 +129,13 @@ button{transition:background-color .16s,color .16s,box-shadow .16s,transform .16
       </div>
     </section>
     <section class="page portal-page" id="page-portal" aria-label="上网认证" hidden>
-      <div class="row"><button class="primary" data-action="openPortal" data-campus>打开并填写</button><button data-action="discoverPortal" data-campus>探测认证地址</button><button data-action="checkInternet" data-campus>检查上网状态</button><button data-action="stopPortal" style="margin-left:auto">停止</button></div>
+      <div class="row"><button class="primary" data-action="openPortal" data-campus>立即认证</button><button data-action="discoverPortal" data-campus>探测认证地址</button><button data-action="checkInternet" data-campus>检查上网状态</button><button data-action="stopPortal" style="margin-left:auto">停止</button></div>
       <div class="description" id="portal-status">连接校园网后，在这里完成上网认证。</div>
       <div class="portal-address" id="portal-address-row" hidden><span id="portal-address"></span><button data-action="adoptAddress">使用当前页面地址</button></div>
       <div class="portal-slot" id="portal-slot"><div class="hint"><i data-icon="globe"></i><p>学校认证页面将在这里打开<br>请先连接已设置的校园 Wi-Fi</p></div></div>
     </section>
   </div>
-  <footer class="footer"><span class="dot" id="status-dot"></span><span class="status" id="status">准备就绪</span><span class="version">v1.3.5 · Windows</span></footer>
+  <footer class="footer"><span class="dot" id="status-dot"></span><span class="status" id="status">准备就绪</span><span class="version">v1.4.3 · Windows</span></footer>
 </main>
 </div>
 <script>

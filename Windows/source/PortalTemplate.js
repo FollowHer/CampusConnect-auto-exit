@@ -40,13 +40,23 @@
   for (const [input, value] of [[user,cfg.username],[pass,cfg.password]]) {
     if (!visible(input)) {
       const tip = tipFor(input);
-      if (visible(tip)) tip.focus();
+      if (visible(tip)) {
+        tip.focus();
+        // Background WebViews may not deliver native focus. Invoke the school's
+        // own reveal handlers without taking OS focus or changing its DOM styles.
+        if (!visible(input) && visible(tip)) tip.dispatchEvent(new FocusEvent('focus'));
+        if (!visible(input) && visible(tip)) tip.dispatchEvent(new FocusEvent('focusin', {bubbles:true}));
+        if (!visible(input) && visible(tip)) tip.click();
+      }
     }
-    if (!visible(input)) return 'missing-fields';
+    if (!editable(input) || !visible(input)) return 'missing-fields';
     setter.call(input, value);
     input.dispatchEvent(new Event('input', {bubbles:true}));
     input.dispatchEvent(new Event('change', {bubbles:true}));
   }
+  // School handlers can reject/reset a value; never report success or submit it.
+  if (!editable(user) || !editable(pass) || !visible(user) || !visible(pass) ||
+      user.value !== cfg.username || pass.value !== cfg.password) return 'missing-fields';
   if (!cfg.submit) return 'filled';
   if (!visible(submit)) return 'missing-submit';
   if (portalButton && /doauthen/.test(submit.getAttribute('onclick') || '') &&

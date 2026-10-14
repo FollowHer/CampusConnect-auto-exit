@@ -37,12 +37,11 @@ public sealed class AutoPolicy
 {
     public int Failures { get; private set; }
     public DateTimeOffset LastAttempt { get; private set; } = DateTimeOffset.MinValue;
-    public bool Suspended => Failures >= 3;
     public bool ShouldJoin(bool enabled, string target, string? current, IEnumerable<string> visible, bool busy, DateTimeOffset now)
         => enabled && target.Length > 0 && current != target && visible.Contains(target, StringComparer.Ordinal)
-            && !busy && !Suspended && now - LastAttempt >= TimeSpan.FromSeconds(60);
+            && !busy && now - LastAttempt >= TimeSpan.FromSeconds(60);
     public void Begin(DateTimeOffset now) => LastAttempt = now;
-    public void Fail() => Failures++;
+    public void Fail() { if (Failures < int.MaxValue) Failures++; }
     public void Success() => Failures = 0;
     public void Reset() { Failures = 0; LastAttempt = DateTimeOffset.MinValue; }
 }
@@ -75,7 +74,7 @@ public sealed class PortalRecovery
         State = result;
     }
     public bool ShouldAuthenticate(bool enabled, bool portalEnabled, DateTimeOffset now)
-        => enabled && portalEnabled && State != InternetStatus.Online && (State == InternetStatus.Captive || Failures >= 2)
+        => enabled && portalEnabled && State != InternetStatus.Online && ((Attempts == 0 && Failures == 0) || State == InternetStatus.Captive || Failures >= 2)
             && now - LastAttempt >= RetryDelay;
     public void Begin(DateTimeOffset now) { LastAttempt = now; Attempts = Math.Min(4, Attempts + 1); }
     public void Reset() { Failures = 0; Attempts = 0; LastAttempt = DateTimeOffset.MinValue; State = InternetStatus.Unavailable; }

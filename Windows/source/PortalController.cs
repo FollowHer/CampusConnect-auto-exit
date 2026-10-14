@@ -118,7 +118,7 @@ internal sealed class PortalController
             switch (result) {
                 case "submitted": case "already-submitted":
                     finished = true; password = "";
-                    Status?.Invoke("已提交一次，请查看学校网页结果；不会自动重复提交密码。"); Submitted?.Invoke(); return;
+                    Status?.Invoke("已提交认证，正在检查上网状态；开启自动连接时，未连通将继续重试。"); Submitted?.Invoke(); return;
                 case "waiting-ready" when attempt < 80:
                 case "missing-submit" when attempt < 80: await Task.Delay(150); continue;
                 case "filled":

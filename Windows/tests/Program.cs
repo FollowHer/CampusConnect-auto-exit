@@ -11,6 +11,22 @@ void Invalid(CampusProfile profile) {
 }
 var profile = new CampusProfile(); profile.Validate();
 Expect(!profile.Automatic, "automation off for first launch");
+
+// Previous API/browser selections are ignored on upgrade, preserving the web form settings.
+foreach (var oldMethod in new[] { "direct", "browser" }) {
+    var legacy = JsonSerializer.Deserialize<CampusProfile>(JsonSerializer.Serialize(new {
+        Ssid = "HNPI-STU", Username = "kept-account", PortalUrl = "http://192.0.2.1/eportal/",
+        LoginMethod = oldMethod, ServiceName = "legacy-service", AutoSubmit = false,
+        Automatic = true, UserSelector = "#username", PasswordSelector = "#pwd"
+    }))!;
+    legacy.Validate();
+    Expect(legacy.Username == "kept-account" && legacy.PortalUrl == "http://192.0.2.1/eportal/", "upgrade preserves account and portal");
+    Expect(legacy.Automatic && !legacy.AutoSubmit && legacy.PasswordSelector == "#pwd", "upgrade preserves automation and browser settings");
+    using var migrated = JsonDocument.Parse(JsonSerializer.Serialize(legacy));
+    Expect(!migrated.RootElement.TryGetProperty("LoginMethod", out _) && !migrated.RootElement.TryGetProperty("ServiceName", out _), "saving drops obsolete API settings");
+    Expect(PortalScript.Build(legacy, "dummy-secret").Contains("dummy-secret"), "upgraded configuration builds browser authentication script");
+}
+
 Invalid(profile with { Ssid = "" });
 Invalid(profile with { Ssid = new string('网', 11) });
 Invalid(profile with { PortalUrl = "javascript:alert(1)" });
@@ -27,9 +43,13 @@ Expect(!policy.ShouldJoin(true, "HNPI-STU", null, ["HNPI-STU"], true, now), "bus
 policy.Begin(now);
 Expect(!policy.ShouldJoin(true, "HNPI-STU", null, ["HNPI-STU"], false, now.AddSeconds(59)), "cooldown");
 Expect(policy.ShouldJoin(true, "HNPI-STU", null, ["HNPI-STU"], false, now.AddSeconds(61)), "retry interval");
-policy.Fail(); policy.Fail(); policy.Fail();
-Expect(policy.Suspended && !policy.ShouldJoin(true, "HNPI-STU", null, ["HNPI-STU"], false, now.AddMinutes(2)), "three failures suspend");
-policy.Reset(); Expect(!policy.Suspended, "manual reset");
+for (var i = 1; i <= 1000; i++) {
+    policy.Fail();
+    var retryAt = now.AddSeconds(60 * i);
+    Expect(policy.ShouldJoin(true, "HNPI-STU", null, ["HNPI-STU"], false, retryAt), "Wi-Fi retries without a failure limit");
+    policy.Begin(retryAt);
+}
+policy.Reset(); Expect(policy.ShouldJoin(true, "HNPI-STU", null, ["HNPI-STU"], false, now), "reset allows immediate connection");
 var special = "校<&\"园";
 var xml = XDocument.Parse(WifiService.OpenProfileXml(special));
 XNamespace ns = "http://www.microsoft.com/networking/WLAN/profile/v1";
@@ -87,6 +107,9 @@ if (OperatingSystem.IsWindows()) {
 
 // Regression: unchanged SSID must not latch a formerly successful authentication forever.
 var recovery = new PortalRecovery();
+Expect(recovery.ShouldAuthenticate(true, true, now), "first authentication starts before probes or timer ticks");
+Expect(!recovery.ShouldAuthenticate(false, true, now), "startup respects pause");
+Expect(!recovery.ShouldAuthenticate(true, false, now), "startup respects disabled portal");
 recovery.Observe(InternetStatus.Online);
 Expect(!recovery.ShouldAuthenticate(true, true, now), "online does not reauthenticate");
 recovery.Observe(InternetStatus.Captive);
@@ -105,6 +128,15 @@ recovery.Observe(InternetStatus.Unavailable);
 Expect(!recovery.ShouldAuthenticate(true, true, now), "one timeout does not disrupt login");
 recovery.Observe(InternetStatus.Unavailable);
 Expect(recovery.ShouldAuthenticate(true, true, now), "repeated failures trigger recovery");
+var authenticationTime = now;
+for (var i = 0; i < 1000; i++) {
+    Expect(recovery.ShouldAuthenticate(true, true, authenticationTime), "authentication retries indefinitely");
+    recovery.Begin(authenticationTime);
+    recovery.Observe(InternetStatus.Unavailable);
+    authenticationTime += recovery.RetryDelay;
+}
+recovery.Reset();
+Expect(recovery.ShouldAuthenticate(true, true, now), "new connection resets first authentication delay");
 Expect(InternetEvidence.Classify(200, "<html>Login</html>", "Microsoft Connect Test", true) == ProbeOutcome.Captive, "HTTP 200 portal is not internet");
 Expect(InternetEvidence.Classify(302, "", "Microsoft Connect Test", true) == ProbeOutcome.Captive, "redirect is captive");
 Expect(InternetEvidence.Classify(204, "Microsoft Connect Test", "Microsoft Connect Test", true) != ProbeOutcome.Success, "require exact status");
@@ -131,6 +163,7 @@ using (var client = new HttpClient(new ProbeHandler(request => {
     Expect(await Connectivity.CheckWithClientAsync(client) == InternetStatus.Online, "restored authentication passes again");
 }
 Expect(probeRequests.All(uri => uri.Query.Contains("campus_probe=")) && probeRequests.Select(uri => uri.Query).Distinct().Count() == probeRequests.Count, "fresh challenge for every request");
+
 
 Console.WriteLine($"PASS: {checks} checks (validation, retry policy, native ABI, XML, credentials).");
 
