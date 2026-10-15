@@ -7,6 +7,12 @@
 
 分别为 macOS 和 Windows 制作的桌面校园网连接工具。默认校园 Wi-Fi 为 `HNPI-STU`，认证地址为 `http://192.168.0.123`，可在设置中修改。
 
+## Windows 1.4.4 更新
+
+在「校园网设置」的账号密码下方新增「服务选项（可留空）」。填写学校网页中的完整名称，例如「联通接入服务」，保存后会先选择服务再点击登录。网页没有选项时留空；留空沿用网页默认状态。支持 ePortal 服务菜单和标准下拉框，未找到或未能选中目标服务时提示手动处理，不自动提交。
+
+本次仅更新 Windows，发布标签为 `windows-v1.4.4`；macOS 保持 1.4.5。
+
 ## macOS 1.4.5 更新
 
 修复首次填写账号密码后没有完成自动点击登录、停留在认证页的问题。填写和提交分开处理，确认学校网页登录流程已启动后才标记已提交；首次点击未到达处理函数时补发一次事件，已启动的登录不会重复提交。页面临时未就绪会继续等待，验证码与校验提示仍由用户处理。新增原生 WKWebView 离线回归检查。
@@ -25,11 +31,11 @@
 - 未连通时持续按间隔重试，直到成功、暂停或退出；验证码等特殊表单仍需手动处理。
 - Windows 统一使用网页认证，移除开发版的接口认证选项，保留已保存的账号密码；同时修复 Windows 显示内部 Wi-Fi 配置名的问题。
 
-Windows 安装包为 1.4.3，macOS 通用包为 1.4.5。已通过核心、浏览器回归和安装包校验，实际连接耗时受校园网络及设备影响；尚未完成新版的真实校园网端到端登录验证。
+Windows 安装包为 1.4.4，macOS 通用包为 1.4.5。已通过核心、浏览器回归和安装包校验，实际连接耗时受校园网络及设备影响；尚未完成新版的真实校园网端到端登录验证。
 
 ## 下载
 
-**[Windows 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/v1.4.3/CampusConnect-Windows-x64-1.4.3-Setup.exe)** · **[macOS 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v1.4.5/CampusConnect-macOS-universal-1.4.5.zip)** · [GitHub 发布版本](https://github.com/Ye9137/CampusConnect/releases) · [Gitee 国内下载](https://gitee.com/lyz9137/CampusConnect/releases)
+**[Windows 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/windows-v1.4.4/CampusConnect-Windows-x64-1.4.4-Setup.exe)** · **[macOS 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v1.4.5/CampusConnect-macOS-universal-1.4.5.zip)** · [GitHub 发布版本](https://github.com/Ye9137/CampusConnect/releases) · [Gitee 国内下载](https://gitee.com/lyz9137/CampusConnect/releases)
 
 ## 界面预览
 

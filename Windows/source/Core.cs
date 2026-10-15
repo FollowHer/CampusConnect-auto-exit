@@ -10,6 +10,7 @@ public sealed record CampusProfile
     public bool PortalEnabled { get; init; } = true;
     public string PortalUrl { get; init; } = "http://192.168.0.123";
     public string Username { get; init; } = "";
+    public string ServiceOption { get; init; } = "";
     public string UserSelector { get; init; } = "";
     public string PasswordSelector { get; init; } = "";
     public string SubmitSelector { get; init; } = "";
@@ -86,7 +87,7 @@ public static class PortalScript
     {
         var origin = CampusProfile.Origin(profile.PortalUrl) ?? throw new InvalidOperationException("认证地址无效。");
         var payload = JsonSerializer.Serialize(new {
-            origin, username = profile.Username, password, userSelector = profile.UserSelector,
+            origin, username = profile.Username, password, serviceOption = profile.ServiceOption, userSelector = profile.UserSelector,
             passwordSelector = profile.PasswordSelector, submitSelector = profile.SubmitSelector, submit = profile.AutoSubmit
         });
         using var stream = typeof(PortalScript).Assembly.GetManifestResourceStream("CampusConnect.PortalTemplate.js")

@@ -9,7 +9,8 @@ const core = fs.readFileSync(path.join(__dirname, '../../macOS/source/Core.swift
 const macScript = core.slice(core.indexOf('        (() => {'), core.indexOf('        """', core.indexOf('        (() => {')))
   .split('\n').map(line => line.startsWith('        ') ? line.slice(8) : line).join('\n')
   .replace('\\(json)', '/*CAMPUS_CONFIG*/').replaceAll('\\\\', '\\');
-assert.equal(macScript, template);
+// Windows alone adds optional service selection; shared credential handling stays aligned.
+assert.equal(macScript, template.replace(/  \/\/ WINDOWS_SERVICE_OPTION_BEGIN[\s\S]*?  \/\/ WINDOWS_SERVICE_OPTION_END\n/, ''));
 const cfg = {origin:'http://portal.test', username:'test-account\'"', password:'test-password\'"',
   userSelector:'', passwordSelector:'', submitSelector:'', submit:true};
 const script = overrides => template.replace('/*CAMPUS_CONFIG*/', JSON.stringify({...cfg, ...overrides}));
@@ -115,6 +116,88 @@ document.getElementById('loginLink').onclick = () => clicks++;
     assert.equal(await page.locator('[name=account]').inputValue(),cfg.username);
     assert.equal(await page.locator('[readonly]').inputValue(),'提示');
     assert.equal(await page.evaluate(()=>genericClicks),1);
-    console.log('PASS: ePortal real DOM, hidden inputs, readonly tips, focus/blur, image link, delayed button, explicit selectors, origin, deduplication and Mac/Windows script parity.');
+    // Native select: exact visible name, events, no selection when blank, no wrong submission.
+    const nativeService = '<input name="username"><input type="password"><select id="service"><option value="">请选择服务</option><option value="unicom">联通接入服务</option><option value="mobile">移动接入服务</option></select><button type="submit" onclick="window.clicks++">登录</button>';
+    await reset();
+    await page.setContent(nativeService);
+    await page.evaluate(() => { window.clicks=0; window.serviceEvents=[]; for (const type of ['input','change']) document.querySelector('select').addEventListener(type,()=>serviceEvents.push(type)); });
+    assert.equal(await page.evaluate(script({serviceOption:'  联通接入服务  '})), 'submitted');
+    assert.equal(await page.locator('#service').inputValue(),'unicom');
+    assert.deepEqual(await page.evaluate(()=>serviceEvents),['input','change']);
+    assert.equal(await page.evaluate(()=>clicks),1);
+    await reset(); await page.setContent(nativeService);
+    assert.equal(await page.evaluate(script({serviceOption:''})), 'submitted');
+    assert.equal(await page.locator('#service').inputValue(),'');
+    await reset(); await page.setContent(nativeService);
+    assert.equal(await page.evaluate(script({serviceOption:'联通'})), 'missing-service');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    assert.equal(await page.evaluate(script({serviceOption:'不存在'})), 'missing-service');
+    await page.locator('option[value=unicom]').evaluate(e=>e.disabled=true);
+    assert.equal(await page.evaluate(script({serviceOption:'联通接入服务'})), 'missing-service');
+    await page.locator('option[value=unicom]').evaluate(e=>e.disabled=false);
+    await page.locator('#service').evaluate(e=>e.onchange=()=>{e.value='';});
+    assert.equal(await page.evaluate(script({serviceOption:'联通接入服务'})), 'missing-service');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    await reset(); await page.setContent(nativeService + '<select><option>联通接入服务</option></select>');
+    assert.equal(await page.evaluate(script({serviceOption:'联通接入服务'})), 'missing-service');
+    // Delayed services can arrive between retries.
+    await reset(); await page.setContent(nativeService.replace('<option value="unicom">联通接入服务</option>',''));
+    assert.equal(await page.evaluate(script({serviceOption:'联通接入服务'})), 'missing-service');
+    await page.locator('#service').evaluate(e=>e.add(new Option('联通接入服务','unicom')));
+    assert.equal(await page.evaluate(script({serviceOption:'联通接入服务',submit:false})), 'filled');
+    assert.equal(await page.locator('#service').inputValue(),'unicom');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    // School ePortal uses clickable divs and a hidden value, not a native select.
+    const addServiceMenu = async (lazy=false) => page.evaluate(lazy => {
+      document.body.insertAdjacentHTML('beforeend', '<input type="hidden" id="net_access_type"><div id="serviceShowHideTop"><span id="selectDisname">请选择服务</span></div><div id="serviceShowHide" style="display:none"></div>');
+      window.menuOpens=0; window.serviceClicks=0;
+      window.populateServices = () => {
+        const menu=document.getElementById('serviceShowHide');
+        menu.innerHTML='<div id="bch_service_0"><div><div id="_service_0">联通接入服务</div></div></div>';
+        document.getElementById('bch_service_0').onclick=()=>{
+          window.serviceClicks++;
+          document.getElementById('net_access_type').value='unicom-internal';
+          document.getElementById('selectDisname').textContent='联通接入服务';
+          menu.style.display='none';
+          window.domainSelected='school.example';
+        };
+      };
+      if(!lazy) populateServices();
+      document.getElementById('serviceShowHideTop').onclick=()=>{
+        window.menuOpens++; document.getElementById('serviceShowHide').style.display='block';
+      };
+    },lazy);
+    await reset(); await addServiceMenu();
+    assert.equal(await page.evaluate(script({serviceOption:'联通接入服务'})), 'submitted');
+    assert.equal(await page.locator('#net_access_type').inputValue(),'unicom-internal');
+    assert.equal(await page.evaluate(()=>domainSelected),'school.example');
+    assert.equal(await page.evaluate(()=>serviceClicks),1);
+    assert.equal(await page.evaluate(()=>clicks),1);
+    await reset(); await addServiceMenu(true);
+    assert.equal(await page.evaluate(script({serviceOption:'联通接入服务'})), 'missing-service');
+    assert.equal(await page.evaluate(script({serviceOption:'联通接入服务'})), 'missing-service');
+    assert.equal(await page.evaluate(()=>menuOpens),1);
+    await page.evaluate(()=>populateServices());
+    assert.equal(await page.evaluate(script({serviceOption:'联通接入服务',submit:false})), 'filled');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    assert.equal(await page.evaluate(script({serviceOption:'联通接入服务'})), 'submitted');
+    assert.equal(await page.evaluate(()=>serviceClicks),1);
+    await reset(); await addServiceMenu();
+    await page.locator('#bch_service_0').evaluate(e=>e.onclick=()=>{});
+    assert.equal(await page.evaluate(script({serviceOption:'联通接入服务'})), 'missing-service');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    await reset(); await addServiceMenu();
+    await page.locator('#bch_service_0').evaluate(e=>{
+      const handler=e.onclick;
+      e.onclick=()=>{handler();document.body.insertAdjacentHTML('beforeend','<input id="operatorPwd">');};
+    });
+    assert.equal(await page.evaluate(script({serviceOption:'联通接入服务'})), 'manual-required');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    await reset();
+    assert.equal(await page.evaluate(script({serviceOption:'联通接入服务'})), 'missing-service');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    await reset();
+    assert.equal(await page.evaluate(script({serviceOption:''})), 'submitted');
+    console.log('PASS: service selection (native/ePortal/lazy/blank/missing/disabled/ambiguous/rejected/operator fields) and ePortal real DOM, hidden inputs, readonly tips, focus/blur, image link, delayed button, explicit selectors, origin, deduplication and shared Mac/Windows credential script parity.');
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -62,6 +62,46 @@
       input.dispatchEvent(new Event('change', {bubbles:true}));
     }
   }
+  // WINDOWS_SERVICE_OPTION_BEGIN
+  const serviceName = (cfg.serviceOption || '').trim();
+  if (serviceName) {
+    const normalized = text => (text || '').trim();
+    const serviceValue = document.querySelector('#net_access_type');
+    const serviceLabel = document.querySelector('#selectDisname');
+    if (portalButton && serviceValue && serviceLabel && !(serviceValue instanceof HTMLSelectElement)) {
+      // Use the school's existing menu click handlers, including domain/operator updates.
+      // Opening the menu can lazily fetch services for the account just filled above.
+      if (normalized(serviceLabel.textContent) !== serviceName || !serviceValue.value) {
+        const opener = document.querySelector('#serviceShowHideTop');
+        const opened = window.__campusServiceMenus ||= new WeakMap();
+        if (visible(opener) && opened.get(opener) !== cfg.username) {
+          opened.set(opener, cfg.username);
+          opener.click();
+        }
+        const choices = [...document.querySelectorAll('#serviceShowHide [id^="bch_service_"]')]
+          .filter(row => visible(row) && row.getAttribute('aria-disabled') !== 'true' &&
+            normalized((row.querySelector('[id^="_service_"]') || row).textContent) === serviceName);
+        if (choices.length !== 1) return 'missing-service';
+        choices[0].click();
+        if (normalized(serviceLabel.textContent) !== serviceName || !serviceValue.value) return 'missing-service';
+      }
+    } else {
+      const root = pass.form || document;
+      const choices = [...root.querySelectorAll('select')].filter(select => visible(select) && !select.multiple)
+        .flatMap(select => [...select.options].filter(option => !option.disabled &&
+          !(option.parentElement instanceof HTMLOptGroupElement && option.parentElement.disabled) &&
+          normalized(option.textContent) === serviceName).map(option => ({select, option})));
+      if (choices.length !== 1) return 'missing-service';
+      const {select, option} = choices[0];
+      if (select.selectedIndex !== option.index) {
+        select.selectedIndex = option.index;
+        select.dispatchEvent(new Event('input', {bubbles:true}));
+        select.dispatchEvent(new Event('change', {bubbles:true}));
+      }
+      if (select.selectedOptions[0] !== option || select.disabled) return 'missing-service';
+    }
+  }
+  // WINDOWS_SERVICE_OPTION_END
   // School handlers can reject/reset a value; never report success or submit it.
   if (!editable(user) || !editable(pass) || !visible(user) || !visible(pass) ||
       user.value !== cfg.username || pass.value !== cfg.password) return 'missing-fields';

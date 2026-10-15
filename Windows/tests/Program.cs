@@ -10,6 +10,9 @@ void Invalid(CampusProfile profile) {
     throw new Exception("Invalid profile accepted.");
 }
 var profile = new CampusProfile(); profile.Validate();
+Expect(profile.ServiceOption == "", "service selection defaults to blank");
+var serviceProfile = JsonSerializer.Deserialize<CampusProfile>(JsonSerializer.Serialize(profile with { ServiceOption = "联通接入服务" }))!;
+Expect(serviceProfile.ServiceOption == "联通接入服务", "service selection survives configuration round trip");
 Expect(!profile.Automatic, "automation off for first launch");
 
 // Previous API/browser selections are ignored on upgrade, preserving the web form settings.
@@ -61,10 +64,11 @@ Expect(Marshal.SizeOf<WifiService.AvailableNetwork>() == 628, "native network AB
 Expect(Marshal.SizeOf<WifiService.Association>() == 68, "native association ABI");
 Expect(Marshal.SizeOf<WifiService.ConnectionAttributes>() == 604, "native connection ABI");
 var secret = "test'\\\"\n</script>";
-var script = PortalScript.Build(profile with { Username = secret }, secret);
+var script = PortalScript.Build(profile with { Username = secret, ServiceOption = secret }, secret);
 var payload = script.Split("const cfg = ")[1].Split(';')[0];
 using var json = JsonDocument.Parse(payload);
 Expect(json.RootElement.GetProperty("password").GetString() == secret, "credential JSON escaping");
+Expect(json.RootElement.GetProperty("serviceOption").GetString() == secret, "service option JSON escaping");
 Expect(!script.Contains("/*CAMPUS_CONFIG*/"), "embedded resource substituted");
 if (args.Length == 1) File.WriteAllText(args[0], script);
 

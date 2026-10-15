@@ -121,6 +121,9 @@ internal sealed class PortalController
                     Status?.Invoke("已提交认证，正在检查上网状态；开启自动连接时，未连通将继续重试。"); Submitted?.Invoke(); return;
                 case "waiting-ready" when attempt < 80:
                 case "missing-submit" when attempt < 80: await Task.Delay(150); continue;
+                case "missing-service" when attempt < 80: await Task.Delay(150); continue;
+                case "missing-service":
+                    RequiresInteraction = true; finished = true; password = ""; Status?.Invoke("未找到或未能选中填写的服务选项，请检查完整名称或在网页中手动选择。网页没有选项时，请清空设置中的服务选项。"); return;
                 case "filled":
                     RequiresInteraction = true; finished = true; password = ""; Status?.Invoke("账号密码已填写，请在网页中手动点击登录。"); return;
                 case "missing-submit":
