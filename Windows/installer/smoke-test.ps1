@@ -8,7 +8,7 @@ if (Test-Path $registryPath) { throw 'Use a clean Windows test user; CampusConne
 $sandbox = Join-Path ([IO.Path]::GetTempPath()) ('CampusConnect custom path test ' + [guid]::NewGuid().ToString('N'))
 $first = Join-Path $sandbox 'First install'
 $second = Join-Path $sandbox ('Second install ' + ([string][char]0x6821))
-if (Test-Path 'D:\') { $second = Join-Path 'D:\' ('CampusConnect directory test ' + [guid]::NewGuid().ToString('N')) }
+if (Test-Path 'D:\') { $second = Join-Path 'D:\' ('CampusConnect directory test ' + ([string][char]0x6821) + ' ' + [guid]::NewGuid().ToString('N')) }
 $shell = New-Object -ComObject WScript.Shell
 $appName = ([string][char]0x6821) + ([string][char]0x56ed) + ' Wi-Fi ' + ([string][char]0x52a9) + ([string][char]0x624b)
 $desktopShortcut = Join-Path ($shell.SpecialFolders.Item('Desktop')) ($appName + '.lnk')
@@ -18,7 +18,23 @@ Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
+// Use the Unicode Shell API: WScript.Shell can return an empty TargetPath for
+// Chinese .lnk names on runners whose ANSI code page cannot represent them.
+[ComImport, Guid("000214F9-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IShellLinkW {
+    void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder path, int count, IntPtr findData, uint flags);
+}
 public static class InstallerWizard {
+    public static string ShortcutTarget(string filename) {
+        object link = Activator.CreateInstance(Type.GetTypeFromCLSID(new Guid("00021401-0000-0000-C000-000000000046")));
+        try {
+            ((System.Runtime.InteropServices.ComTypes.IPersistFile)link).Load(filename, 0);
+            var target = new StringBuilder(32768);
+            ((IShellLinkW)link).GetPath(target, target.Capacity, IntPtr.Zero, 0);
+            if (target.Length == 0) throw new InvalidOperationException("Shortcut has no file target: " + filename);
+            return target.ToString();
+        } finally { Marshal.FinalReleaseComObject(link); }
+    }
     [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
     private static extern uint GetLongPathName(string path, StringBuilder result, uint capacity);
     public static string LongPath(string path) {
@@ -120,13 +136,15 @@ function Install-App([string]$Target, [switch]$Wizard) {
     if ($entry.UninstallString -ne ('"' + $expectedUninstaller + '"')) { throw 'Windows Settings has an invalid uninstall command.' }
     if ($entry.QuietUninstallString -ne ('"' + $expectedUninstaller + '" /S')) { throw 'The registered silent uninstall command is invalid.' }
     if ((Get-Item $expectedUninstaller).Length -lt 1024) { throw 'Uninstaller is missing or incomplete.' }
-    if (-not (Test-Path $desktopShortcut)) { throw 'Desktop shortcut is missing.' }
-    Write-Host ('Shortcut target=' + $shell.CreateShortcut($desktopShortcut).TargetPath + '; expected=' + (Join-Path $Target 'CampusConnect.exe'))
-    if ([InstallerWizard]::LongPath($shell.CreateShortcut($desktopShortcut).TargetPath) -ne [InstallerWizard]::LongPath((Join-Path $Target 'CampusConnect.exe'))) { throw 'Shortcut points to the wrong app.' }
-    if (-not (Test-Path $menuUninstallShortcut)) { throw 'Start menu uninstall entry is missing.' }
-    if ([InstallerWizard]::LongPath($shell.CreateShortcut($menuUninstallShortcut).TargetPath) -ne [InstallerWizard]::LongPath($expectedUninstaller)) { throw 'Start menu uninstall entry points to the wrong file.' }
-    if (-not (Test-Path $menuShortcut)) { throw 'Start menu shortcut is missing.' }
-    if ([InstallerWizard]::LongPath($shell.CreateShortcut($menuShortcut).TargetPath) -ne [InstallerWizard]::LongPath((Join-Path $Target 'CampusConnect.exe'))) { throw 'Start menu points to the wrong app.' }
+    foreach ($shortcut in @($desktopShortcut, $menuShortcut, $menuUninstallShortcut)) {
+        if (-not (Test-Path -LiteralPath $shortcut)) { throw "Shortcut is missing: $shortcut" }
+        $expected = if ($shortcut -eq $menuUninstallShortcut) { $expectedUninstaller } else { Join-Path $Target 'CampusConnect.exe' }
+        $actual = [InstallerWizard]::ShortcutTarget($shortcut)
+        Write-Host "Shortcut [$shortcut] target=[$actual]; expected=[$expected]"
+        if ([InstallerWizard]::LongPath($actual) -ne [InstallerWizard]::LongPath($expected)) {
+            throw "Shortcut points to the wrong file: $shortcut"
+        }
+    }
     $appFiles = @(Get-ChildItem $Target -Recurse -File | Where-Object { $_.Name -ne 'unrelated-user-file.txt' })
     $executables = @($appFiles | Where-Object { $_.Extension -eq '.exe' })
     if ($executables.Count -ne 2 -or ($executables.Name -notcontains 'Uninstall.exe')) { throw 'The installation must contain the app and uninstaller.' }
@@ -151,7 +169,7 @@ try {
     $startupCommand = (Get-ItemProperty $runKey).'CampusConnect.Windows'
     if ($startupCommand -ne ('"' + (Join-Path $second 'CampusConnect.exe') + '" --startup')) { throw 'Upgrade did not preserve startup or update its path.' }
     $uiReport = Join-Path $sandbox 'ui-report.json'
-    $uiProcess = Start-Process -FilePath (Join-Path $second 'CampusConnect.exe') -ArgumentList ('--verify-ui "' + $uiReport + '"') -PassThru
+    $uiProcess = Start-Process -FilePath $desktopShortcut -ArgumentList ('--verify-ui "' + $uiReport + '"') -PassThru
     if (-not $uiProcess.WaitForExit(60000)) {
         $uiProcess.Kill()
         throw 'Single-file app did not initialize its WebView2 UI.'
@@ -184,6 +202,16 @@ try {
     if (-not (Test-Path $sentinel)) { throw 'Uninstall deleted unrelated files.' }
     Write-Host 'PASS: custom path with spaces, shortcut target, missing-uninstaller repair, registry command, reinstall, directory migration, uninstall, unrelated-file preservation.'
 } finally {
+    # Preserve diagnostics even if a later installation or UI check fails.
+    $diagnostics = Join-Path $PSScriptRoot 'work/smoke-diagnostics'
+    New-Item -ItemType Directory -Path $diagnostics -Force | Out-Null
+    foreach ($path in @($desktopShortcut, $menuShortcut, $menuUninstallShortcut)) {
+        if (Test-Path -LiteralPath $path) {
+            $prefix = if ($path -eq $desktopShortcut) { 'desktop-' } else { 'menu-' }
+            Copy-Item -LiteralPath $path -Destination (Join-Path $diagnostics ($prefix + [IO.Path]::GetFileName($path)))
+        }
+    }
+    Get-ChildItem $sandbox -Filter '*report.json' -ErrorAction SilentlyContinue | Copy-Item -Destination $diagnostics
     if (-not (Test-Path $registryPath) -and (Test-Path $sandbox)) { Remove-Item $sandbox -Recurse -Force }
     if (-not (Test-Path $registryPath) -and (Test-Path $second)) { Remove-Item $second -Recurse -Force }
 }

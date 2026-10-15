@@ -2,7 +2,7 @@ name: Build desktop apps
 on:
   push:
     branches: [main, master]
-    tags: ['v*']
+    tags: ['v*', 'windows-v*']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -25,10 +25,19 @@ jobs:
           name: CampusConnect-macOS-universal
           path: CampusConnect-macOS-universal.zip
   windows:
-    runs-on: windows-latest
+    name: windows (${{ matrix.runtime }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
     strategy:
+      fail-fast: false
       matrix:
-        runtime: [win-x64, win-arm64]
+        include:
+          - runtime: win-x64
+            arch: x64
+            runner: windows-latest
+          - runtime: win-arm64
+            arch: arm64
+            runner: windows-11-arm
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -45,12 +54,13 @@ jobs:
         shell: pwsh
         run: |
           npm install --no-save --prefix Windows/tests playwright@1.58.2
+          if ($LASTEXITCODE -ne 0) { throw 'Playwright installation failed.' }
           npx --prefix Windows/tests playwright install chromium
-          node Windows/tests/desktop.test.cjs
-          node Windows/tests/recovery.test.cjs
-          node Windows/tests/eportal.test.cjs
-          node Windows/tests/portal-early.test.cjs
-          node Windows/tests/performance.test.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Chromium installation failed.' }
+          foreach ($test in @('desktop', 'recovery', 'eportal', 'portal-early', 'performance')) {
+            node "Windows/tests/$test.test.cjs"
+            if ($LASTEXITCODE -ne 0) { throw "$test tests failed." }
+          }
       - name: Install NSIS
         shell: pwsh
         run: choco install nsis -y --no-progress
@@ -60,9 +70,15 @@ jobs:
         shell: pwsh
         run: ./Windows/build-installer.ps1 -Runtime ${{ matrix.runtime }}
       - name: Test single-file startup, shortcuts, repair, upgrade and uninstall
-        if: matrix.runtime == 'win-x64'
         shell: pwsh
-        run: ./Windows/installer/smoke-test.ps1 -Installer ./Windows/installer/dist/CampusConnect-Windows-x64-Setup.exe
+        run: ./Windows/installer/smoke-test.ps1 -Installer ./Windows/installer/dist/CampusConnect-Windows-${{ matrix.arch }}-Setup.exe
+      - name: Upload native test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-test-diagnostics-${{ matrix.runtime }}
+          path: Windows/installer/work/smoke-diagnostics/
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: CampusConnect-Setup-${{ matrix.runtime }}
