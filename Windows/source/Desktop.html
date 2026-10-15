@@ -137,7 +137,7 @@ select {font:inherit;border:1px solid var(--border,#ddd);border-radius:8px;paddi
       <div class="portal-slot" id="portal-slot"><div class="hint"><i data-icon="globe"></i><p>学校认证页面将在这里打开<br>请先连接已设置的校园 Wi-Fi</p></div></div>
     </section>
   </div>
-  <footer class="footer"><span class="dot" id="status-dot"></span><span class="status" id="status">准备就绪</span><span class="version">v1.5.0 · Windows</span></footer>
+  <footer class="footer"><span class="dot" id="status-dot"></span><span class="status" id="status">准备就绪</span><span class="version">v1.5.1 · Windows</span></footer>
 </main>
 </div>
 <script>
@@ -213,6 +213,13 @@ function loadProfile(p,password) {
  byId('password').value=password||'';byId('portalEnabled').checked=p.portalEnabled;byId('autoSubmit').checked=p.autoSubmit;
  byId('portal-fields').hidden=!p.portalEnabled;setMode(p.useSavedWifiProfile?'saved':'open');automatic=p.automatic;dirty=false;
 }
+function snapshot() {
+ const draft=profile();
+ // Keep the exact unfinished input, including spaces, through a UI refresh.
+ for(const key of ['ssid','portalUrl','username','serviceOption','userSelector','passwordSelector','submitSelector'])draft[key]=byId(key).value;
+ return {profile:draft,password:byId('password').value,dirty,advancedOpen:byId('browser-advanced').open};
+}
+function checkpoint() {post('draft',{snapshot:snapshot()});}
 function textNode(tag,text,className) { const e=document.createElement(tag);e.textContent=text;if(className)e.className=className;return e; }
 function setText(id,value) {const e=byId(id);if(e.textContent!==value)e.textContent=value;}
 function update(s) {
@@ -250,7 +257,7 @@ function renderNetworks(s) {
    if(n.ssid===s.currentSsid)row.append(textNode('span','已连接','connected'));
    const button=textNode('button','设为目标');button.disabled=s.busy;button.addEventListener('click',()=>{
      if(byId('ssid').value!==n.ssid){byId('username').value='';byId('password').value='';byId('serviceOption').value='';}
-     byId('ssid').value=n.ssid;setMode(n.secure?'saved':'open');dirty=true;go('settings');
+     byId('ssid').value=n.ssid;setMode(n.secure?'saved':'open');dirty=true;checkpoint();go('settings');
    });row.append(button);list.append(row);
  }
 }
@@ -261,11 +268,18 @@ function receive(message) {
    byId('startup').disabled=!message.available;
    byId('startup-description').textContent=message.error||(message.enabled?'已开启：登录 Windows 后在托盘运行，自动连接按已保存设置执行。':'登录 Windows 后在托盘运行，自动连接按已保存设置执行。开关立即生效。');
  }
- if(message.kind==='profile')loadProfile(message.profile,message.password);
+ if(message.kind==='profile'){loadProfile(message.profile,message.password);checkpoint();}
+ if(message.kind==='restore'){
+   const s=message.snapshot;
+   if(s?.dirty&&s.profile){loadProfile({...s.profile,automatic:state.automatic},s.password);dirty=true;}
+   if(s)byId('browser-advanced').open=!!s.advancedOpen;
+   go(message.page);
+   checkpoint();post('hydrated');
+ }
  if(message.kind==='page')go(message.page);
- if(message.kind==='address'){byId('portalUrl').value=message.address;dirty=true;go('settings');}
+ if(message.kind==='address'){byId('portalUrl').value=message.address;dirty=true;checkpoint();go('settings');}
 }
-window.campus={receive};
+window.campus={receive,snapshot};
 window.chrome?.webview?.addEventListener('message',e=>receive(e.data));
 document.querySelectorAll('[data-page]').forEach(e=>{
  e.addEventListener('pointerenter',event=>{
@@ -276,9 +290,11 @@ document.querySelectorAll('[data-page]').forEach(e=>{
 });
 document.querySelectorAll('[data-goto]').forEach(e=>e.addEventListener('click',()=>go(e.dataset.goto)));
 document.querySelectorAll('[data-action]').forEach(e=>e.addEventListener('click',()=>post(e.dataset.action)));
-document.querySelectorAll('[data-mode]').forEach(e=>e.addEventListener('click',()=>{setMode(e.dataset.mode);dirty=true;}));
+document.querySelectorAll('[data-mode]').forEach(e=>e.addEventListener('click',()=>{setMode(e.dataset.mode);dirty=true;checkpoint();}));
 byId('startup').addEventListener('change',()=>{byId('startup').disabled=true;post('setStartup',{enabled:byId('startup').checked});});
-byId('page-settings').addEventListener('input',()=>{dirty=true;});
+byId('page-settings').addEventListener('input',e=>{if(e.target.id!=='startup'){dirty=true;checkpoint();}});
+byId('page-settings').addEventListener('change',e=>{if(e.target.id!=='startup'){dirty=true;checkpoint();}});
+byId('browser-advanced').addEventListener('toggle',checkpoint);
 byId('portalEnabled').addEventListener('change',()=>{byId('portal-fields').hidden=!byId('portalEnabled').checked;});
 byId('automatic').addEventListener('change',()=>{
  const enabled=byId('automatic').checked;

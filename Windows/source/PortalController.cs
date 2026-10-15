@@ -6,14 +6,20 @@ namespace CampusConnect;
 
 internal sealed class PortalController
 {
-    public WebView2 View { get; } = new() { Dock = DockStyle.Fill };
+    public WebView2 View { get; private set; } = new() { Dock = DockStyle.Fill };
     public event Action<string>? Status;
     public event Action? Submitted;
     public event Action? AddressChanged;
+    public event Action<bool>? ProcessFailed;
     public bool IsActive { get; private set; }
     public bool RequiresInteraction { get; private set; }
     public bool IsAuthenticating => authenticationDeadline != null || (!finished && !RequiresInteraction && fillingGeneration == generation);
-    public string Address => View.CoreWebView2?.Source is { } source && source != "about:blank" ? source : "";
+    public string Address {
+        get {
+            try { return View.CoreWebView2?.Source is { } source && source != "about:blank" ? source : ""; }
+            catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException) { return ""; }
+        }
+    }
     private CampusProfile? profile;
     private string password = "";
     private int generation;
@@ -31,12 +37,21 @@ internal sealed class PortalController
 
     private async Task InitializeAsync()
     {
+        var view = View;
         // Reuse the already initialized browser runtime; the school's browser
         // still has its own settings and cannot access the application's bridge.
         var environment = await getEnvironment();
+        if (view != View || view.IsDisposed) return;
         var options = environment.CreateCoreWebView2ControllerOptions();
         options.IsInPrivateModeEnabled = true;
-        await View.EnsureCoreWebView2Async(environment, options);
+        await view.EnsureCoreWebView2Async(environment, options);
+        if (view != View || view.IsDisposed) return;
+        view.CoreWebView2.ProcessFailed += (_, e) => {
+            if (view != View || view.IsDisposed) return;
+            if (e.ProcessFailedKind is CoreWebView2ProcessFailedKind.BrowserProcessExited or
+                CoreWebView2ProcessFailedKind.RenderProcessExited or CoreWebView2ProcessFailedKind.RenderProcessUnresponsive)
+                ProcessFailed?.Invoke(e.ProcessFailedKind == CoreWebView2ProcessFailedKind.BrowserProcessExited);
+        };
         View.CoreWebView2.Settings.IsPasswordAutosaveEnabled = false;
         View.CoreWebView2.Settings.IsGeneralAutofillEnabled = false;
         View.CoreWebView2.Settings.IsWebMessageEnabled = false;
@@ -96,15 +111,39 @@ internal sealed class PortalController
         Status?.Invoke("已经连接成功");
     }
     public void ReportInternetUnavailable() { internetConfirmed = false; Status?.Invoke("未连接网络"); }
+    public void ResumeView()
+    {
+        try {
+            View.CoreWebView2?.Resume();
+            View.Invalidate(true);
+            View.Update();
+        } catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException) {
+            ProcessFailed?.Invoke(false);
+        }
+    }
+    public void ResetBrowser()
+    {
+        generation++;
+        profile = null; password = ""; finished = false; IsActive = false;
+        authenticationDeadline = null; authenticationConfirmed = false; internetConfirmed = false; observingGeneration = -1;
+        // Never re-submit a login/captcha just because the UI browser was restarted.
+        RequiresInteraction = true;
+        initialization = null; bootstrapId = null; fillingGeneration = -1;
+        var oldView = View;
+        View = new() { Dock = DockStyle.Fill };
+        oldView.Dispose();
+    }
     public void Stop(bool clearView = true)
     {
         generation++;
         profile = null; password = ""; finished = false; authenticationDeadline = null; authenticationConfirmed = false; internetConfirmed = false;
         IsActive = false; RequiresInteraction = false;
-        if (View.CoreWebView2 is not null) {
-            View.CoreWebView2.Stop();
-            if (clearView) View.CoreWebView2.Navigate("about:blank");
-        }
+        try {
+            if (View.CoreWebView2 is not null) {
+                View.CoreWebView2.Stop();
+                if (clearView) View.CoreWebView2.Navigate("about:blank");
+            }
+        } catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
     }
     private async Task<bool> CheckAuthenticationPageAsync()
     {

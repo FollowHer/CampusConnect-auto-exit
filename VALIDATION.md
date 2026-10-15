@@ -1,5 +1,18 @@
 # 构建与验证记录
 
+## 2026-10-15 Windows 1.5.1 后台恢复修复
+
+- 基线采用本地已交付的 CampusConnect-source-1.5.0.zip，SHA-256 为 bb227ca90ddb3afc20fcf248ad6e50a2124abab798eb536b49d3fad37f9ef6b9；并非旧开发目录的 1.4.4。逐文件对比确认 1.5.0 的认证脚本、联网检测、macOS 源码未改动。
+- Windows 新增 MainForm.BrowserRecovery.cs 和 recovery.test.cjs。托盘打开/最小化恢复刷新，失焦一分钟后恢复刷新；ready 握手每次重新填充状态，仅首次启动连接定时器。草稿内存检查点、重载超时、重建控制器、原生重试面板和失败事件去重防止持续空白。
+- 2068 项核心检查通过（Windows 注册表检查在 macOS 上跳过）；80 项新增恢复检查通过（真实文档连续重载、崩溃检查点回放、草稿/密码/高级设置/当前页面、认证页坐标、后台暂停状态、无额外登录/保存、无 localStorage/sessionStorage 写入）。
+- 18 项基础认证脚本、桌面界面、ePortal、提前初始化、性能、安装文件清单回归全部通过。回归日志保存在本地 work/validation。
+- .NET 10 Windows x64 ReadyToRun 自包含发布、NSIS -WX 编译通过；安装包 50,225,019 字节，CRC32 df97d2cc，SHA-256 ea06ea4ece11a1d778b21eb0e9a6c332cab1eb14f9e6714a2290a8f15e9d4017。PE 检查确认应用 x64、安装器 x86 及版本 1.5.1。
+- 未执行 Windows 原生安装/卸载、长时间驻留、睡眠唤醒、真实 WebView2 进程故障或真实校园网登录；这些仍需 Windows 实机验收。后续按用户要求准备 GitHub / Gitee 发布，安装包沿用已验证的本地构建。
+
+建议 Windows 实机验收：在设置页输入未保存内容后最小化/托盘隐藏，恢复检查内容与当前页；停留后台数小时及睡眠唤醒后重复；认证页刷新界面时确认验证码/登录未被重交；连续快速打开仅恢复一次；退出发生在恢复中时应无异常提示。
+
+恢复策略依据 Microsoft WebView2 官方进程故障说明：https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/process-related-events
+
 ## 2026-10-12 首次公开发布准备
 
 - 用户在下载发布包后再次反馈“测试没问题”；本次仅补充 GitHub 首页界面预览，未重新进行软件功能测试。

@@ -47,6 +47,7 @@ jobs:
           npm install --no-save --prefix Windows/tests playwright@1.58.2
           npx --prefix Windows/tests playwright install chromium
           node Windows/tests/desktop.test.cjs
+          node Windows/tests/recovery.test.cjs
           node Windows/tests/eportal.test.cjs
           node Windows/tests/portal-early.test.cjs
           node Windows/tests/performance.test.cjs

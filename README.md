@@ -1,4 +1,6 @@
 # 校园 Wi-Fi 助手 · CampusConnect
+
+Windows 最新版为 **1.5.1**：修复长时间后台后重新打开界面空白，增加自动刷新和浏览器故障恢复，保留当前页及未保存设置。详见 [Windows 更新说明](Windows/1.5.1-更新说明.md)。macOS 保持 **1.5.0**。
 [![Build](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml/badge.svg)](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -18,7 +20,7 @@ ping 使用系统路由，可能经过 VPN。Windows x64 与 macOS Apple 芯片 
 
 ## 下载
 
-**[Windows 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/v1.5.0/CampusConnect-Windows-x64-1.5.0-Setup.exe)** · **[macOS 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v1.5.0/CampusConnect-macOS-universal-1.5.0.zip)** · [GitHub 发布版本](https://github.com/Ye9137/CampusConnect/releases) · [Gitee 国内下载](https://gitee.com/lyz9137/CampusConnect/releases)
+**[Windows 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/windows-v1.5.1/CampusConnect-Windows-x64-1.5.1-Setup.exe)** · **[macOS 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v1.5.0/CampusConnect-macOS-universal-1.5.0.zip)** · [GitHub 发布版本](https://github.com/Ye9137/CampusConnect/releases) · [Gitee 国内下载](https://gitee.com/lyz9137/CampusConnect/releases)
 
 ## 界面预览
 
@@ -102,7 +104,7 @@ Windows 安装版提供自定义安装目录、可选桌面快捷方式（默认
 
 ## Windows 1.2.4 性能优化
 
-Windows 版将无线扫描、连接和 SSID 检查移到后台；启动时先显示缓存网络，再更新扫描结果。界面仅更新有变化且正在显示的列表，合并状态及认证页位置通知，并复用浏览器环境。启用 ReadyToRun 预编译后，继续保持单文件分发。这段记录描述 1.2.4 的改动；当前两端版本均为 1.5.0。
+Windows 版将无线扫描、连接和 SSID 检查移到后台；启动时先显示缓存网络，再更新扫描结果。界面仅更新有变化且正在显示的列表，合并状态及认证页位置通知，并复用浏览器环境。启用 ReadyToRun 预编译后，继续保持单文件分发。这段记录描述 1.2.4 的改动；当前 Windows 为 1.5.1，macOS 为 1.5.0。
 
 ## 1.2.3 认证页适配
 

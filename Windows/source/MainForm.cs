@@ -6,7 +6,7 @@ using Microsoft.Web.WebView2.WinForms;
 
 namespace CampusConnect;
 
-internal sealed class MainForm : Form
+internal sealed partial class MainForm : Form
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private CampusProfile saved = new();
@@ -14,7 +14,7 @@ internal sealed class MainForm : Form
     private readonly AutoPolicy policy = new();
     private readonly PortalRecovery recovery = new();
     private readonly PortalController portal;
-    private readonly WebView2 shell = new() { Dock = DockStyle.Fill };
+    private WebView2 shell = new() { Dock = DockStyle.Fill };
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 20000 };
     private readonly NotifyIcon tray;
     private readonly StartupRegistration startup = new(Application.ExecutablePath);
@@ -51,6 +51,7 @@ internal sealed class MainForm : Form
         Controls.Add(portal.View);
         var menu = new ContextMenuStrip();
         menu.Items.Add("打开主窗口", null, (_, _) => RestoreWindow());
+        menu.Items.Add("刷新界面", null, (_, _) => RestoreWindow());
         menu.Items.Add("暂停自动连接", null, (_, _) => Pause());
         menu.Items.Add("退出", null, (_, _) => { exiting = true; Close(); });
         tray = new NotifyIcon { Icon = Icon, Text = "校园 Wi-Fi 助手", Visible = true, ContextMenuStrip = menu };
@@ -76,6 +77,7 @@ internal sealed class MainForm : Form
             if (!IsDisposed && expected == generation) await SafeAsync(() => CheckInternetAsync(false));
         };
         timer.Tick += async (_, _) => await RefreshAsync(scan: currentSsid != saved.Ssid);
+        InitializeBrowserRecovery();
         Activated += (_, _) => { if (uiReady) PushStartup(); };
         Shown += async (_, _) => {
             if (startInTray) Hide();
@@ -96,17 +98,21 @@ internal sealed class MainForm : Form
     private Task<CoreWebView2Environment> GetBrowserEnvironmentAsync()
     {
         Directory.CreateDirectory(LocalStore.DirectoryPath);
+        if (browserEnvironment is { IsFaulted: true } or { IsCanceled: true }) browserEnvironment = null;
         return browserEnvironment ??= CoreWebView2Environment.CreateAsync(null,
             Path.Combine(LocalStore.DirectoryPath, "WebView2"), new CoreWebView2EnvironmentOptions("--no-proxy-server"));
     }
 
     private async Task InitializeShellAsync()
     {
+        var view = shell;
         var environment = await GetBrowserEnvironmentAsync();
+        if (IsDisposed || view.IsDisposed || view != shell) return;
         var options = environment.CreateCoreWebView2ControllerOptions();
         options.IsInPrivateModeEnabled = true;
-        await shell.EnsureCoreWebView2Async(environment, options);
-        var core = shell.CoreWebView2;
+        await view.EnsureCoreWebView2Async(environment, options);
+        if (IsDisposed || view.IsDisposed || view != shell) return;
+        var core = view.CoreWebView2;
         core.Settings.AreHostObjectsAllowed = false;
         core.Settings.AreDevToolsEnabled = false;
         core.Settings.AreDefaultContextMenusEnabled = false;
@@ -133,15 +139,14 @@ internal sealed class MainForm : Form
         };
         core.WebMessageReceived += async (_, e) => {
             // This bridge belongs ONLY to the embedded application UI, never the school browser.
-            if (!DesktopBridge.IsTrustedSource(e.Source) || e.WebMessageAsJson.Length > 65536) return;
+            if (view != shell || !DesktopBridge.IsTrustedSource(e.Source) || e.WebMessageAsJson.Length > 65536) return;
             await SafeAsync(async () => {
                 using var document = JsonDocument.Parse(e.WebMessageAsJson);
                 await HandleCommandAsync(document.RootElement);
             });
         };
-        core.ProcessFailed += (_, _) => {
-            if (IsDisposed) return;
-            MessageBox.Show(this, "界面进程意外退出，请从托盘退出后重新打开程序。", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+        core.ProcessFailed += (_, e) => {
+            if (view == shell) OnShellProcessFailed(e.ProcessFailedKind);
         };
         core.Navigate(DesktopBridge.Uri);
     }
@@ -152,9 +157,13 @@ internal sealed class MainForm : Form
         switch (property.GetString()) {
             case "ready":
                 if (uiReady) break;
-                try { if (configurationLoad is not null) (saved, savedPassword) = await configurationLoad; }
+                var firstReady = !configurationLoaded;
+                try { if (firstReady && configurationLoad is not null) (saved, savedPassword) = await configurationLoad; }
                 catch (Exception ex) { Record("无法读取配置，请重新填写并保存：" + ex.Message); }
-                uiReady = true; PushProfile(); PushStartup(); PushState();
+                configurationLoaded = true;
+                uiReady = true; PushProfile(); PushStartup(); SendState();
+                Post(new { kind = "restore", page, snapshot = shellSnapshot });
+                if (!firstReady) break;
                 if (verificationPath is not null) {
                     var result = await shell.CoreWebView2.ExecuteScriptAsync("JSON.stringify({pageCount:document.querySelectorAll('.nav button').length,title:document.title,passwordMasked:document.getElementById('password').type==='password',startupToggle:!!document.getElementById('startup'),byYe:document.querySelector('.author').textContent})");
                     var snapshot = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(JsonSerializer.Deserialize<string>(result) ?? "{}") ?? [];
@@ -167,6 +176,13 @@ internal sealed class MainForm : Form
                 // Connect immediately from the WLAN cache when the target is already visible.
                 await RefreshAsync(scan: false);
                 if (currentSsid != saved.Ssid) await RefreshAsync(); break;
+            case "hydrated":
+                shellReady?.TrySetResult(true);
+                break;
+            case "draft":
+                if (uiReady && message.TryGetProperty("snapshot", out var snapshotData) && snapshotData.ValueKind == JsonValueKind.Object)
+                    shellSnapshot = snapshotData.Clone();
+                break;
             case "page":
                 var next = message.GetProperty("page").GetString();
                 if (next is "dashboard" or "settings" or "portal") {
@@ -212,17 +228,25 @@ internal sealed class MainForm : Form
     private void UpdatePortalVisibility()
     {
         if (IsDisposed) return;
-        var show = page == "portal" && !pageTransitioning && portal.IsActive && portalBounds.Width > 0 && portalBounds.Height > 0;
+        var show = uiReady && page == "portal" && !pageTransitioning && portal.IsActive && portalBounds.Width > 0 && portalBounds.Height > 0;
         if (show) {
             if (portal.View.Bounds != portalBounds) portal.View.Bounds = portalBounds;
             if (!portal.View.Visible) portal.View.BringToFront();
         }
-        if (portal.View.Visible != show) portal.View.Visible = show;
+        if (portal.View.Visible != show) {
+            portal.View.Visible = show;
+            if (show) portal.ResumeView();
+        }
     }
     private void Post(object message)
     {
-        if (!uiReady || IsDisposed || shell.CoreWebView2 is null || !DesktopBridge.IsTrustedSource(shell.CoreWebView2.Source)) return;
-        shell.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(message, JsonOptions));
+        if (!uiReady || IsDisposed || Disposing) return;
+        try {
+            if (shell.CoreWebView2 is { } core && DesktopBridge.IsTrustedSource(core.Source))
+                core.PostWebMessageAsJson(JsonSerializer.Serialize(message, JsonOptions));
+        } catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException) {
+            RequestShellRecovery();
+        }
     }
     private void PushStartup()
     {
@@ -267,7 +291,7 @@ internal sealed class MainForm : Form
             throw new InvalidOperationException("请先填写上网账号和密码，再开启自动连接。");
         LocalStore.Save(draft, secret);
         generation++; saved = draft; savedPassword = secret; policy.Reset(); recovery.Reset(); online = null;
-        StopAuthentication(); UpdatePortalVisibility(); PushProfile();
+        StopAuthentication(); UpdatePortalVisibility(); shellSnapshot = null; PushProfile();
         Record(saved.Automatic ? "设置已保存，自动连接已开启。" : "设置已保存。");
         if (saved.Automatic) _ = RefreshAsync(scan: false);
     }
@@ -386,5 +410,8 @@ internal sealed class MainForm : Form
         UpdatePortalVisibility(); PushState();
     }
     private static void OpenSettings(string uri) => Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true });
-    private void RestoreWindow() { ShowInTaskbar = true; Show(); WindowState = FormWindowState.Normal; Activate(); }
+    private void RestoreWindow() {
+        ShowInTaskbar = true; Show(); WindowState = FormWindowState.Normal; Activate();
+        RequestShellRecovery(userRequested: true);
+    }
 }
