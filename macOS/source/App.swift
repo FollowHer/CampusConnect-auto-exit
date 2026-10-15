@@ -89,7 +89,7 @@ enum Page: String, CaseIterable {
         if joining { return "正在连接校园网" }
         if !authorized { return "等待 Wi-Fi 访问授权" }
         if !powered { return "Wi-Fi 已关闭" }
-        if campusConnected { return internet == true ? "校园网已连接 · 可上网" : recovery.state == .captive ? "Wi-Fi 已连接 · 待认证" : "Wi-Fi 已连接 · 正在确认上网状态" }
+        if campusConnected { return internet == true ? "校园网已连接 · 可上网" : internet == false ? "Wi-Fi 已连接 · 未联网" : "Wi-Fi 已连接 · 正在确认上网状态" }
         return currentSSID == nil ? "当前未连接 Wi-Fi" : "已连接 \(currentSSID!)"
     }
 
@@ -139,7 +139,6 @@ enum Page: String, CaseIterable {
                 if !snapshot.powered { self.status = "请先在系统菜单中打开 Wi-Fi。"; return }
                 if snapshot.hiddenCount > 0 && snapshot.networks.isEmpty { self.status = "未能读取网络名称，请检查系统定位服务。" }
                 if self.campusConnected {
-                    self.policy.success()
                     self.verifyInternet(openIfOffline: self.automatic)
                 } else if self.policy.shouldJoin(enabled: self.automatic, target: self.saved.ssid, current: snapshot.current,
                       visible: snapshot.networks.map(\.ssid), busy: self.joining, now: Date()) {
@@ -158,6 +157,7 @@ enum Page: String, CaseIterable {
             profile.ssid = profile.ssid.trimmingCharacters(in: .whitespacesAndNewlines)
             profile.portalURL = profile.portalURL.trimmingCharacters(in: .whitespacesAndNewlines)
             profile.username = profile.username.trimmingCharacters(in: .whitespacesAndNewlines)
+            profile.serviceOption = profile.serviceOption.trimmingCharacters(in: .whitespacesAndNewlines)
             profile.automatic = enable
             try profile.validate()
             if profile.joinMode != .open && wifiPassword.isEmpty { throw AppError.message("请填写 Wi-Fi 密码。") }
@@ -197,11 +197,10 @@ enum Page: String, CaseIterable {
                 self.joining = false
                 switch result {
                 case .success(let ssid):
-                    self.currentSSID = ssid; self.policy.success(); self.recovery.reset(); self.internet = nil; self.connectionGeneration += 1
+                    self.currentSSID = ssid; self.recovery.reset(); self.internet = nil; self.connectionGeneration += 1
                     self.record("已连接 \(ssid)。")
                     if self.automatic || manual { self.verifyInternet(openIfOffline: self.automatic, manual: manual) }
                 case .failure(let error):
-                    self.policy.fail()
                     self.record("连接失败：\(error.localizedDescription)\(self.automatic ? " 将继续自动重试，不限制次数。" : "")")
                 }
             }
@@ -229,13 +228,14 @@ enum Page: String, CaseIterable {
                 guard expected == self.connectionGeneration, self.saved.ssid == expectedSSID, current == expectedSSID else { return }
                 self.internet = result == .online
                 self.recovery.observe(result)
-                if result == .online { self.portal.requiresInteraction = false; self.record("校园 Wi-Fi 互联网检查通过。") }
+                if result == .online { self.portal.confirmInternetAccess(); self.status = "" }
                 else {
                     self.authenticated = false
-                    self.record(result == .captive ? "Wi-Fi 已连接，但认证未完成或已失效。" : "Wi-Fi 已连接，尚未确认互联网可用；将继续检查。")
-                    if openIfOffline && !self.portal.requiresInteraction &&
+                    self.portal.reportInternetUnavailable()
+                    self.record("百度 ping 不通，判定未联网。")
+                    if self.automatic && self.saved.autoSubmit && !self.portal.isAuthenticating &&
                         self.recovery.shouldAuthenticate(enabled: self.automatic, portalEnabled: self.saved.portalEnabled, now: Date()) {
-                        self.record("检测到校园网认证失效，正在重新认证…")
+                        self.record("百度 ping 不通，正在重新连接校园网认证…")
                         self.openPortal(showPage: false)
                     }
                 }
@@ -380,10 +380,12 @@ struct RootView: View {
                 }.clipped()
                 Divider()
                 HStack {
-                    Circle().fill(model.campusConnected && model.internet == true ? accent : Color.secondary).frame(width: 6, height: 6)
-                    Text(model.status).font(.system(size: 11)).lineLimit(2)
+                    if !model.status.isEmpty {
+                        Circle().fill(model.campusConnected && model.internet == true ? accent : Color.secondary).frame(width: 6, height: 6)
+                        Text(model.status).font(.system(size: 11)).lineLimit(2)
+                    }
                     Spacer()
-                    Text("v1.4.5 · macOS").font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text("v1.5.0 · macOS").font(.system(size: 10)).foregroundStyle(.secondary)
                 }.padding(.horizontal, 24).padding(.vertical, 12)
             }.background(Color(nsColor: .textBackgroundColor))
         }.frame(minWidth: 980, minHeight: 700).tint(accent).textSelection(.disabled)
@@ -530,10 +532,13 @@ struct RootView: View {
                                     SecureField("输入上网密码", text: $model.portalPassword).textFieldStyle(.roundedBorder)
                                 }
                             }
+                            field("服务选项（可留空）", text: $model.draft.serviceOption, prompt: "例如：联通接入服务")
+                            Text("填写认证网页中要选择的完整名称；网页没有服务选项时留空。留空时不自动选择，沿用网页默认状态。")
+                                .font(.system(size: 11)).foregroundStyle(.secondary)
                             Toggle("自动填写后点击登录", isOn: $model.draft.autoSubmit)
                             DisclosureGroup("网页认证高级设置 · 特殊认证页面") {
                                 VStack(alignment: .leading, spacing: 12) {
-                                    Text("留空时自动识别。若学校页面包含验证码、运营商选择或特殊表单，可先手动完成，再按页面调整。")
+                                    Text("留空时自动识别。若学校页面包含验证码、额外运营商账号或特殊表单，可先手动完成，再按页面调整。")
                                         .font(.system(size: 11)).foregroundStyle(.secondary)
                                     field("账号输入框 CSS 选择器", text: $model.draft.userSelector, prompt: "例如 #username")
                                     field("密码输入框 CSS 选择器", text: $model.draft.passwordSelector, prompt: "例如 #password")

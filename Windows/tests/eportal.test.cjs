@@ -9,8 +9,8 @@ const core = fs.readFileSync(path.join(__dirname, '../../macOS/source/Core.swift
 const macScript = core.slice(core.indexOf('        (() => {'), core.indexOf('        """', core.indexOf('        (() => {')))
   .split('\n').map(line => line.startsWith('        ') ? line.slice(8) : line).join('\n')
   .replace('\\(json)', '/*CAMPUS_CONFIG*/').replaceAll('\\\\', '\\');
-// Windows alone adds optional service selection; shared credential handling stays aligned.
-assert.equal(macScript, template.replace(/  \/\/ WINDOWS_SERVICE_OPTION_BEGIN[\s\S]*?  \/\/ WINDOWS_SERVICE_OPTION_END\n/, ''));
+// Both platforms share credential and service selection behavior.
+assert.equal(macScript, template);
 const cfg = {origin:'http://portal.test', username:'test-account\'"', password:'test-password\'"',
   userSelector:'', passwordSelector:'', submitSelector:'', submit:true};
 const script = overrides => template.replace('/*CAMPUS_CONFIG*/', JSON.stringify({...cfg, ...overrides}));
@@ -198,6 +198,47 @@ document.getElementById('loginLink').onclick = () => clicks++;
     assert.equal(await page.evaluate(()=>clicks),0);
     await reset();
     assert.equal(await page.evaluate(script({serviceOption:''})), 'submitted');
+    // Confirmed submission is not authentication; preserve school callbacks.
+    const setupAuth = async () => {
+      await reset();
+      await page.evaluate(() => {
+        window.handlerCalls=0; window.loginCalls=0; window.callbackCalls=0;
+        window.AuthInterFace={login(...args){loginCalls++;window.reply=args.at(-1)}};
+        window.doauthen=function(){handlerCalls++;AuthInterFace.login('dummy',function(result){callbackCalls++;window.originalResult=result.result;return 42})};
+        document.querySelector('#loginLink').setAttribute('onclick','doauthen()');
+      });
+    };
+    const confirmed = extra => script({confirmSubmit:true,...extra});
+    await setupAuth();
+    assert.equal(await page.evaluate(confirmed()),'waiting-submit');
+    assert.equal(await page.evaluate(confirmed()),'submitted');
+    assert.equal(await page.evaluate(confirmed({statusOnly:true,password:''})),'awaiting-authentication');
+    assert.equal(await page.evaluate(()=>reply({result:'success'})),42);
+    assert.equal(await page.evaluate(confirmed({statusOnly:true,password:''})),'authenticated');
+    assert.equal(await page.evaluate(()=>callbackCalls),1);
+    assert.equal(await page.evaluate(()=>loginCalls),1);
+    await setupAuth(); await page.evaluate(confirmed()); await page.evaluate(confirmed());
+    await page.evaluate(()=>reply({result:'fail'}));
+    assert.equal(await page.evaluate(confirmed()),'authentication-rejected');
+    assert.equal(await page.evaluate(()=>originalResult),'fail');
+    assert.equal(await page.evaluate(()=>loginCalls),1);
+    await setupAuth();
+    await page.evaluate(()=>{const button=document.querySelector('#loginLink');button.click=()=>{};button.dispatchEvent=()=>true;});
+    assert.equal(await page.evaluate(confirmed()),'waiting-submit');
+    assert.equal(await page.evaluate(confirmed()),'waiting-submit');
+    assert.equal(await page.evaluate(confirmed()),'waiting-submit');
+    assert.equal(await page.evaluate(confirmed()),'submitted');
+    assert.equal(await page.evaluate(()=>handlerCalls),1);
+    assert.equal(await page.evaluate(()=>loginCalls),1);
+    assert.equal(await page.evaluate(confirmed()),'already-submitted');
+    await reset();
+    assert.equal(await page.evaluate(confirmed({statusOnly:true})),'not-submitted');
+    assert.equal(await page.locator('#pwd').inputValue(),'');
+    await page.goto('http://portal.test/eportal/success.jsp');
+    assert.equal(await page.evaluate(confirmed({statusOnly:true})),'not-submitted');
+    await page.goto('http://portal.test/eportal/success.jsp?userIndex=fixture');
+    assert.equal(await page.evaluate(confirmed({statusOnly:true})),'authenticated');
+    assert.equal(await page.evaluate(confirmed({statusOnly:true,origin:'http://other.test'})),'wrong-origin');
     console.log('PASS: service selection (native/ePortal/lazy/blank/missing/disabled/ambiguous/rejected/operator fields) and ePortal real DOM, hidden inputs, readonly tips, focus/blur, image link, delayed button, explicit selectors, origin, deduplication and shared Mac/Windows credential script parity.');
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

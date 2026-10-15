@@ -1,6 +1,12 @@
 (() => {
   const cfg = /*CAMPUS_CONFIG*/;
   if (location.origin !== cfg.origin) return 'wrong-origin';
+  const outcome = window.__campusSubmitAttempt?.result;
+  const successPage = location.pathname === '/eportal/success.jsp' &&
+    !!new URLSearchParams(location.search).get('userIndex');
+  if (successPage || outcome === 'success') return 'authenticated';
+  if (outcome === 'fail') return 'authentication-rejected';
+  if (cfg.statusOnly) return window.__campusSubmitted ? 'awaiting-authentication' : 'not-submitted';
   const pending = cfg.confirmSubmit && window.__campusSubmitAttempt;
   if (pending && pending.failed) return 'submission-unconfirmed';
   if (window.__campusSubmitted) return 'already-submitted';
@@ -62,7 +68,6 @@
       input.dispatchEvent(new Event('change', {bubbles:true}));
     }
   }
-  // WINDOWS_SERVICE_OPTION_BEGIN
   const serviceName = (cfg.serviceOption || '').trim();
   if (serviceName) {
     const normalized = text => (text || '').trim();
@@ -101,7 +106,6 @@
       if (select.selectedOptions[0] !== option || select.disabled) return 'missing-service';
     }
   }
-  // WINDOWS_SERVICE_OPTION_END
   // School handlers can reject/reset a value; never report success or submit it.
   if (!editable(user) || !editable(pass) || !visible(user) || !visible(pass) ||
       user.value !== cfg.username || pass.value !== cfg.password) return 'missing-fields';
@@ -123,7 +127,19 @@
       if (owner[key] === state[key]) return;
       const original = owner[key];
       const wrapped = function(...args) {
-        if (flag === 'login') window.__campusSubmitted = true;
+        if (flag === 'login') {
+          window.__campusSubmitted = true;
+          // Observe the school's response without replacing its request or callback.
+          const last = args.length - 1;
+          if (typeof args[last] === 'function') {
+            const callback = args[last];
+            args[last] = function(result, ...rest) {
+              if (result?.result === 'success') state.result = 'success';
+              else if (result?.result === 'fail') state.result = 'fail';
+              return callback.call(this, result, ...rest);
+            };
+          }
+        }
         else { state.handlerStarted = true; state.startedAt = Date.now(); }
         try { return original.apply(this, args); }
         catch (error) { state.failed = true; throw error; }
@@ -139,7 +155,13 @@
       // Let blur/change handlers and layout finish before rechecking the values.
       return 'waiting-submit';
     }
-    if (state.clicks >= 2) return 'submission-unconfirmed';
+    if (state.clicks >= 2) {
+      // Both click events were lost: invoke the same page handler once. All
+      // school validation/encryption/service logic remains in that handler.
+      try { window.doauthen.call(submit); } catch (_) { state.failed = true; }
+      if (state.failed) return 'submission-unconfirmed';
+      return window.__campusSubmitted ? 'submitted' : 'waiting-submit';
+    }
     state.clicks++;
     try {
       if (state.clicks === 1) submit.click();

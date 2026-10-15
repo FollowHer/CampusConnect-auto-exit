@@ -60,15 +60,16 @@ import WebKit
     @discardableResult func js(_ script: String) async throws -> Any {
         try await view.evaluateJavaScript(script) ?? NSNull()
     }
-    func fill(submit: Bool = true, origin: String = "http://portal.test") async throws -> String {
+    func fill(submit: Bool = true, origin: String = "http://portal.test", service: String = "") async throws -> String {
         var profile = CampusProfile()
+        profile.serviceOption = service
         profile.portalURL = origin; profile.username = "dummy-user"; profile.autoSubmit = submit
         return try await js(PortalScript.build(profile: profile, password: "dummy-password")) as? String ?? "nil"
     }
-    func pump() async throws -> String {
+    func pump(service: String = "") async throws -> String {
         var result = ""
         for _ in 0..<20 {
-            result = try await fill()
+            result = try await fill(service: service)
             if !["waiting-submit", "waiting-ready"].contains(result) { return result }
             try await Task.sleep(nanoseconds: 50_000_000)
         }
@@ -139,6 +140,62 @@ import WebKit
         try await load()
         try expect(try await fill(origin:"http://other.test") == "wrong-origin", "origin guard retained")
         try expect(try await js("document.getElementById('pwd').value") as? String == "", "foreign origin receives no password")
-        print("PASS: \(checks) native WKWebView checks (first click, handler readiness, asynchronous handoff, deduplication, manual mode and origin).")
+        // Real WebKit verifies service selection before the two-stage ePortal submit.
+        try await load()
+        try await js("""
+          document.body.insertAdjacentHTML('beforeend', '<input id="net_access_type" type="hidden"><div id="serviceShowHideTop"><span id="selectDisname">请选择服务</span></div><div id="serviceShowHide" style="display:none"><div id="bch_service_0"><div><div id="_service_0">联通接入服务</div></div></div></div>');
+          window.serviceClicks=0;window.menuOpens=0;
+          document.getElementById('serviceShowHideTop').onclick=()=>{menuOpens++;document.getElementById('serviceShowHide').style.display='block'};
+          document.getElementById('bch_service_0').onclick=()=>{serviceClicks++;document.getElementById('net_access_type').value='unicom';document.getElementById('selectDisname').textContent='联通接入服务';document.getElementById('serviceShowHide').style.display='none'};
+          true
+        """)
+        try expect(try await pump(service:"联通接入服务") == "submitted", "ePortal service selected before submit")
+        try expect(try await js("document.getElementById('net_access_type').value") as? String == "unicom", "school service handler updates internal value")
+        try expect(try await js("serviceClicks") as? Int == 1, "service handler invoked once")
+        try expect(try await js("loginCalls") as? Int == 1, "service selection preserves confirmed one-time login")
+
+        try await load()
+        try await js("document.body.insertAdjacentHTML('beforeend','<select id=service><option value=empty>请选择服务</option><option value=unicom>联通接入服务</option></select>');true")
+        try expect(try await fill(submit:false,service:"  联通接入服务  ") == "filled", "native select accepts exact trimmed display name")
+        try expect(try await js("document.getElementById('service').value") as? String == "unicom", "native service selected")
+        try expect(try await js("loginCalls") as? Int == 0, "manual mode does not login after selection")
+        try expect(try await fill(service:"不存在") == "missing-service", "wrong service stops login")
+        try expect(try await js("loginCalls") as? Int == 0, "missing service never submits default")
+
+        try await load()
+        try await js("document.body.insertAdjacentHTML('beforeend','<select id=service><option value=empty>请选择服务</option></select>');true")
+        try expect(try await fill(service:"联通接入服务") == "missing-service", "wait for delayed service")
+        try await js("document.getElementById('service').add(new Option('联通接入服务','unicom'));true")
+        try expect(try await pump(service:"联通接入服务") == "submitted", "delayed option resumes login")
+
+        try await load()
+        try expect(try await fill(service:"联通接入服务") == "missing-service", "configured service without control requires attention")
+        try expect(try await pump() == "submitted", "blank service supports pages without service selector")
+        // A blue focused button with both activation events lost still uses
+        // the school's own validation/login function, exactly once.
+        try await load()
+        try await js("const b=document.getElementById('loginLink');b.click=()=>{};b.dispatchEvent=()=>true;true")
+        try expect(try await pump() == "submitted", "lost activation falls back to school handler")
+        try expect(try await js("handlerCalls") as? Int == 1, "fallback invokes handler once")
+        try expect(try await js("loginCalls") as? Int == 1, "fallback sends one request")
+        var statusProfile = CampusProfile()
+        statusProfile.portalURL = "http://portal.test"
+        let statusScript = try PortalScript.build(profile: statusProfile, password: "", statusOnly: true)
+        try expect(try await js(statusScript) as? String == "awaiting-authentication", "request alone is not successful authentication")
+        try await load()
+        try await js("AuthInterFace.login=function(...args){loginCalls++;window.reply=args.at(-1)};doauthen=function(){handlerCalls++;AuthInterFace.login('dummy',function(r){window.originalResult=r.result;return 42})};true")
+        _ = try await pump()
+        try expect(try await js(statusScript) as? String == "awaiting-authentication", "wait for response")
+        try expect(try await js("reply({result:'success'})") as? Int == 42, "original callback return preserved")
+        try expect(try await js(statusScript) as? String == "authenticated", "school response confirms authentication")
+        try expect(try await js("originalResult") as? String == "success", "original callback still runs")
+        try await load()
+        try await js("AuthInterFace.login=function(...args){loginCalls++;window.reply=args.at(-1)};doauthen=function(){handlerCalls++;AuthInterFace.login('dummy',function(r){window.originalResult=r.result})};true")
+        _ = try await pump()
+        try await js("reply({result:'fail'});true")
+        try expect(try await js(statusScript) as? String == "authentication-rejected", "rejection is not success")
+        try expect(try await fill() == "authentication-rejected", "rejection never resubmits")
+        try expect(try await js("loginCalls") as? Int == 1, "rejection has one request")
+        print("PASS: \(checks) native WKWebView checks (first click, handler readiness, asynchronous handoff, deduplication, manual mode, origin and service selection).")
     }
 }

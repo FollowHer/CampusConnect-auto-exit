@@ -15,6 +15,7 @@ struct CampusProfile: Codable, Equatable {
     var portalEnabled = true
     var portalURL = "http://192.168.0.123"
     var username = ""
+    var serviceOption = ""
     var userSelector = ""
     var passwordSelector = ""
     var submitSelector = ""
@@ -23,7 +24,7 @@ struct CampusProfile: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case ssid, joinMode, wifiUsername, portalEnabled, portalURL, username
-        case userSelector, passwordSelector, submitSelector, autoSubmit, automatic
+        case serviceOption, userSelector, passwordSelector, submitSelector, autoSubmit, automatic
     }
     init() {}
     init(from decoder: Decoder) throws {
@@ -34,6 +35,7 @@ struct CampusProfile: Codable, Equatable {
         portalEnabled = try values.decodeIfPresent(Bool.self, forKey: .portalEnabled) ?? true
         portalURL = try values.decodeIfPresent(String.self, forKey: .portalURL) ?? "http://192.168.0.123"
         username = try values.decodeIfPresent(String.self, forKey: .username) ?? ""
+        serviceOption = try values.decodeIfPresent(String.self, forKey: .serviceOption) ?? ""
         userSelector = try values.decodeIfPresent(String.self, forKey: .userSelector) ?? ""
         passwordSelector = try values.decodeIfPresent(String.self, forKey: .passwordSelector) ?? ""
         submitSelector = try values.decodeIfPresent(String.self, forKey: .submitSelector) ?? ""
@@ -105,31 +107,14 @@ enum LocalStore {
 
 struct AutoPolicy {
     var lastAttempt = Date.distantPast
-    var failures = 0
     func shouldJoin(enabled: Bool, target: String, current: String?, visible: [String], busy: Bool, now: Date) -> Bool {
         enabled && !target.isEmpty && current != target && visible.contains(target) && !busy && now.timeIntervalSince(lastAttempt) >= 60
     }
     mutating func begin(at date: Date) { lastAttempt = date }
-    mutating func success() { failures = 0 }
-    mutating func fail() { if failures < Int.max { failures += 1 } }
-    mutating func reset() { failures = 0; lastAttempt = .distantPast }
+    mutating func reset() { lastAttempt = .distantPast }
 }
 
-enum InternetStatus: String { case online, captive, unavailable }
-enum ProbeOutcome { case success, captive, unavailable }
-
-enum InternetEvidence {
-    static func classify(status: Int, body: String, expectedBody: String, sameEndpoint: Bool) -> ProbeOutcome {
-        if !sameEndpoint || (300..<400).contains(status) { return .captive }
-        guard status == 200 else { return .unavailable }
-        return body.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == expectedBody.lowercased() ? .success : .captive
-    }
-    static func combine(_ probes: [ProbeOutcome]) -> InternetStatus {
-        if probes.contains(where: { $0 == .captive }) { return .captive }
-        return probes.count == 2 && probes.allSatisfy { $0 == .success } ? .online : .unavailable
-    }
-}
-
+enum InternetStatus: String { case online, unavailable }
 struct PortalRecovery {
     private(set) var failures = 0
     private(set) var attempts = 0
@@ -141,7 +126,7 @@ struct PortalRecovery {
         else { state = result; failures = min(2, failures + 1) }
     }
     func shouldAuthenticate(enabled: Bool, portalEnabled: Bool, now: Date) -> Bool {
-        enabled && portalEnabled && state != .online && ((attempts == 0 && failures == 0) || state == .captive || failures >= 2)
+        enabled && portalEnabled && state != .online && ((attempts == 0 && failures == 0) || failures >= 1)
             && now.timeIntervalSince(lastAttempt) >= retryDelay
     }
     mutating func begin(at now: Date) { lastAttempt = now; attempts = min(4, attempts + 1) }
@@ -152,7 +137,7 @@ enum PortalFillRetry {
     static let maxAttempts = 200
     static let delay: TimeInterval = 0.15
     static func shouldRetry(result: String?, scriptFailed: Bool, attempt: Int) -> Bool {
-        attempt < maxAttempts && (scriptFailed || ["waiting-ready", "waiting-submit", "missing-fields", "missing-submit"].contains(result ?? ""))
+        attempt < maxAttempts && (scriptFailed || ["waiting-ready", "waiting-submit", "missing-fields", "missing-submit", "missing-service"].contains(result ?? ""))
     }
 }
 
@@ -164,11 +149,11 @@ enum PortalScript {
         let formattedHost = host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host
         return "\(scheme)://\(formattedHost)\(port != nil && port != defaultPort ? ":\(port!)" : "")"
     }
-    static func build(profile: CampusProfile, password: String) throws -> String {
+    static func build(profile: CampusProfile, password: String, statusOnly: Bool = false) throws -> String {
         guard let url = profile.validPortalURL, let origin = origin(url) else { throw AppError.message("请先保存认证地址。") }
         let payload: [String: Any] = ["origin": origin, "username": profile.username, "password": password,
-                                    "userSelector": profile.userSelector, "passwordSelector": profile.passwordSelector,
-                                    "submitSelector": profile.submitSelector, "submit": profile.autoSubmit, "confirmSubmit": true]
+                                    "serviceOption": profile.serviceOption, "userSelector": profile.userSelector, "passwordSelector": profile.passwordSelector,
+                                    "submitSelector": profile.submitSelector, "submit": profile.autoSubmit, "confirmSubmit": true, "statusOnly": statusOnly]
         let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         let json = String(decoding: data, as: UTF8.self)
         // Credentials are supplied to the current page only after native SSID + origin checks.
@@ -176,6 +161,12 @@ enum PortalScript {
         (() => {
           const cfg = \(json);
           if (location.origin !== cfg.origin) return 'wrong-origin';
+          const outcome = window.__campusSubmitAttempt?.result;
+          const successPage = location.pathname === '/eportal/success.jsp' &&
+            !!new URLSearchParams(location.search).get('userIndex');
+          if (successPage || outcome === 'success') return 'authenticated';
+          if (outcome === 'fail') return 'authentication-rejected';
+          if (cfg.statusOnly) return window.__campusSubmitted ? 'awaiting-authentication' : 'not-submitted';
           const pending = cfg.confirmSubmit && window.__campusSubmitAttempt;
           if (pending && pending.failed) return 'submission-unconfirmed';
           if (window.__campusSubmitted) return 'already-submitted';
@@ -237,6 +228,44 @@ enum PortalScript {
               input.dispatchEvent(new Event('change', {bubbles:true}));
             }
           }
+          const serviceName = (cfg.serviceOption || '').trim();
+          if (serviceName) {
+            const normalized = text => (text || '').trim();
+            const serviceValue = document.querySelector('#net_access_type');
+            const serviceLabel = document.querySelector('#selectDisname');
+            if (portalButton && serviceValue && serviceLabel && !(serviceValue instanceof HTMLSelectElement)) {
+              // Use the school's existing menu click handlers, including domain/operator updates.
+              // Opening the menu can lazily fetch services for the account just filled above.
+              if (normalized(serviceLabel.textContent) !== serviceName || !serviceValue.value) {
+                const opener = document.querySelector('#serviceShowHideTop');
+                const opened = window.__campusServiceMenus ||= new WeakMap();
+                if (visible(opener) && opened.get(opener) !== cfg.username) {
+                  opened.set(opener, cfg.username);
+                  opener.click();
+                }
+                const choices = [...document.querySelectorAll('#serviceShowHide [id^="bch_service_"]')]
+                  .filter(row => visible(row) && row.getAttribute('aria-disabled') !== 'true' &&
+                    normalized((row.querySelector('[id^="_service_"]') || row).textContent) === serviceName);
+                if (choices.length !== 1) return 'missing-service';
+                choices[0].click();
+                if (normalized(serviceLabel.textContent) !== serviceName || !serviceValue.value) return 'missing-service';
+              }
+            } else {
+              const root = pass.form || document;
+              const choices = [...root.querySelectorAll('select')].filter(select => visible(select) && !select.multiple)
+                .flatMap(select => [...select.options].filter(option => !option.disabled &&
+                  !(option.parentElement instanceof HTMLOptGroupElement && option.parentElement.disabled) &&
+                  normalized(option.textContent) === serviceName).map(option => ({select, option})));
+              if (choices.length !== 1) return 'missing-service';
+              const {select, option} = choices[0];
+              if (select.selectedIndex !== option.index) {
+                select.selectedIndex = option.index;
+                select.dispatchEvent(new Event('input', {bubbles:true}));
+                select.dispatchEvent(new Event('change', {bubbles:true}));
+              }
+              if (select.selectedOptions[0] !== option || select.disabled) return 'missing-service';
+            }
+          }
           // School handlers can reject/reset a value; never report success or submit it.
           if (!editable(user) || !editable(pass) || !visible(user) || !visible(pass) ||
               user.value !== cfg.username || pass.value !== cfg.password) return 'missing-fields';
@@ -258,7 +287,19 @@ enum PortalScript {
               if (owner[key] === state[key]) return;
               const original = owner[key];
               const wrapped = function(...args) {
-                if (flag === 'login') window.__campusSubmitted = true;
+                if (flag === 'login') {
+                  window.__campusSubmitted = true;
+                  // Observe the school's response without replacing its request or callback.
+                  const last = args.length - 1;
+                  if (typeof args[last] === 'function') {
+                    const callback = args[last];
+                    args[last] = function(result, ...rest) {
+                      if (result?.result === 'success') state.result = 'success';
+                      else if (result?.result === 'fail') state.result = 'fail';
+                      return callback.call(this, result, ...rest);
+                    };
+                  }
+                }
                 else { state.handlerStarted = true; state.startedAt = Date.now(); }
                 try { return original.apply(this, args); }
                 catch (error) { state.failed = true; throw error; }
@@ -274,7 +315,13 @@ enum PortalScript {
               // Let blur/change handlers and layout finish before rechecking the values.
               return 'waiting-submit';
             }
-            if (state.clicks >= 2) return 'submission-unconfirmed';
+            if (state.clicks >= 2) {
+              // Both click events were lost: invoke the same page handler once. All
+              // school validation/encryption/service logic remains in that handler.
+              try { window.doauthen.call(submit); } catch (_) { state.failed = true; }
+              if (state.failed) return 'submission-unconfirmed';
+              return window.__campusSubmitted ? 'submitted' : 'waiting-submit';
+            }
             state.clicks++;
             try {
               if (state.clicks === 1) submit.click();

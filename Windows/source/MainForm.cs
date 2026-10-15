@@ -65,7 +65,10 @@ internal sealed class MainForm : Form
             timer.Stop(); timer.Dispose(); tray.Dispose();
             portal.View.Dispose(); shell.Dispose();
         };
-        portal.Status += message => { portalStatus = message; Record(message); UpdatePortalVisibility(); };
+        portal.Status += message => {
+            if (portalStatus != message && message != "已经连接成功") Record(message);
+            portalStatus = message; UpdatePortalVisibility(); PushState();
+        };
         portal.AddressChanged += () => PushState();
         portal.Submitted += async () => {
             var expected = generation;
@@ -241,7 +244,7 @@ internal sealed class MainForm : Form
     {
         var connected = currentSsid == saved.Ssid;
         var title = joining ? "正在连接校园网" : permissionNeeded ? "等待 Wi-Fi 访问授权" :
-            connected ? (online == true ? "校园网已连接 · 可上网" : recovery.State == InternetStatus.Captive ? "Wi-Fi 已连接 · 待认证" : "Wi-Fi 已连接 · 正在确认上网状态") :
+            connected ? (online == true ? "校园网已连接 · 可上网" : online == false ? "Wi-Fi 已连接 · 未联网" : "Wi-Fi 已连接 · 正在确认上网状态") :
             currentSsid is null ? "当前未连接 Wi-Fi" : "已连接 " + currentSsid;
         Post(new { kind = "state", state = new {
             target = saved.Ssid, currentSsid, campusConnected = connected, internetOnline = connected && online == true, connectionTitle = title,
@@ -304,7 +307,6 @@ internal sealed class MainForm : Form
                     Record(currentSsid is null ? "Wi-Fi 连接已断开。" : "当前连接：" + currentSsid);
                 }
                 if (snapshot.Current == saved.Ssid) {
-                    policy.Success();
                     _ = SafeAsync(() => CheckInternetAsync(saved.Automatic));
                 } else if (policy.ShouldJoin(saved.Automatic, saved.Ssid, snapshot.Current, snapshot.Networks.Select(n => n.Ssid), false, DateTimeOffset.UtcNow)) {
                     await ConnectAsync(snapshot, expected);
@@ -326,9 +328,8 @@ internal sealed class MainForm : Form
     private async Task ConnectAsync(WifiSnapshot snapshot, int expected, bool manual = false)
     {
         policy.Begin(DateTimeOffset.UtcNow); joining = true; PushState();
-        try { await WifiService.JoinAsync(saved, snapshot); policy.Success(); }
+        try { await WifiService.JoinAsync(saved, snapshot); }
         catch (Exception ex) {
-            policy.Fail();
             throw new InvalidOperationException(ex.Message + (saved.Automatic
                 ? " 将继续自动重试，不限制次数。" : ""), ex);
         } finally { joining = false; PushState(); }
@@ -363,11 +364,11 @@ internal sealed class MainForm : Form
             if (expected != generation || IsDisposed || current != activeProfile.Ssid) return;
             online = result == InternetStatus.Online;
             recovery.Observe(result);
-            if (result == InternetStatus.Online) portal.ConfirmInternetAccess();
-            Record(result == InternetStatus.Online ? "校园 Wi-Fi 互联网检查通过。" :
-                result == InternetStatus.Captive ? "Wi-Fi 已连接，但认证未完成或已失效。" : "Wi-Fi 已连接，尚未确认互联网可用；将继续检查。");
-            if (openIfOffline && !portal.RequiresInteraction && recovery.ShouldAuthenticate(saved.Automatic, saved.PortalEnabled, DateTimeOffset.UtcNow)) {
-                Record("检测到校园网认证失效，正在重新认证…");
+            if (result == InternetStatus.Online) { portal.ConfirmInternetAccess(); status = ""; }
+            else portal.ReportInternetUnavailable();
+            if (result != InternetStatus.Online) Record("百度 ping 不通，判定未联网。");
+            if (saved.Automatic && saved.AutoSubmit && !portal.IsAuthenticating && recovery.ShouldAuthenticate(saved.Automatic, saved.PortalEnabled, DateTimeOffset.UtcNow)) {
+                Record("百度 ping 不通，正在重新连接校园网认证…");
                 await OpenPortalAsync(showPage: false);
             }
         } finally { checking = false; PushState(); }

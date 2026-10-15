@@ -137,7 +137,7 @@ select {font:inherit;border:1px solid var(--border,#ddd);border-radius:8px;paddi
       <div class="portal-slot" id="portal-slot"><div class="hint"><i data-icon="globe"></i><p>学校认证页面将在这里打开<br>请先连接已设置的校园 Wi-Fi</p></div></div>
     </section>
   </div>
-  <footer class="footer"><span class="dot" id="status-dot"></span><span class="status" id="status">准备就绪</span><span class="version">v1.4.4 · Windows</span></footer>
+  <footer class="footer"><span class="dot" id="status-dot"></span><span class="status" id="status">准备就绪</span><span class="version">v1.5.0 · Windows</span></footer>
 </main>
 </div>
 <script>
@@ -221,6 +221,7 @@ function update(s) {
  setText('target',s.target||'');setText('auto-target',s.target||'');byId('automatic').checked=s.automatic;
  byId('automatic').disabled=s.busy;byId('busy').hidden=!s.busy;byId('permission-card').hidden=!s.permissionNeeded;
  byId('status-dot').classList.toggle('online',s.internetOnline===true);
+ byId('status-dot').hidden = !s.status;
  byId('scan-time').textContent=s.lastScan?'更新于 '+s.lastScan:'';
  document.querySelectorAll('[data-action="refresh"],[data-action="connect"],#save,#save-enable').forEach(e=>e.disabled=s.busy);
  document.querySelectorAll('[data-campus]').forEach(e=>e.disabled=!s.campusConnected||s.busy);

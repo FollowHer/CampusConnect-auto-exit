@@ -47,7 +47,6 @@ policy.Begin(now);
 Expect(!policy.ShouldJoin(true, "HNPI-STU", null, ["HNPI-STU"], false, now.AddSeconds(59)), "cooldown");
 Expect(policy.ShouldJoin(true, "HNPI-STU", null, ["HNPI-STU"], false, now.AddSeconds(61)), "retry interval");
 for (var i = 1; i <= 1000; i++) {
-    policy.Fail();
     var retryAt = now.AddSeconds(60 * i);
     Expect(policy.ShouldJoin(true, "HNPI-STU", null, ["HNPI-STU"], false, retryAt), "Wi-Fi retries without a failure limit");
     policy.Begin(retryAt);
@@ -116,7 +115,7 @@ Expect(!recovery.ShouldAuthenticate(false, true, now), "startup respects pause")
 Expect(!recovery.ShouldAuthenticate(true, false, now), "startup respects disabled portal");
 recovery.Observe(InternetStatus.Online);
 Expect(!recovery.ShouldAuthenticate(true, true, now), "online does not reauthenticate");
-recovery.Observe(InternetStatus.Captive);
+recovery.Observe(InternetStatus.Unavailable);
 Expect(recovery.ShouldAuthenticate(true, true, now), "expired authentication on same SSID recovers");
 recovery.Begin(now);
 Expect(!recovery.ShouldAuthenticate(true, true, now.AddSeconds(20)), "no repeated submission every heartbeat");
@@ -129,7 +128,7 @@ Expect(!recovery.ShouldAuthenticate(true, false, now.AddHours(1)), "disabled por
 recovery.Observe(InternetStatus.Online);
 Expect(recovery.Attempts == 0 && !recovery.ShouldAuthenticate(true, true, now.AddHours(1)), "internet recovery resets attempts");
 recovery.Observe(InternetStatus.Unavailable);
-Expect(!recovery.ShouldAuthenticate(true, true, now), "one timeout does not disrupt login");
+Expect(recovery.ShouldAuthenticate(true, true, now), "first failed ping triggers recovery");
 recovery.Observe(InternetStatus.Unavailable);
 Expect(recovery.ShouldAuthenticate(true, true, now), "repeated failures trigger recovery");
 var authenticationTime = now;
@@ -141,38 +140,11 @@ for (var i = 0; i < 1000; i++) {
 }
 recovery.Reset();
 Expect(recovery.ShouldAuthenticate(true, true, now), "new connection resets first authentication delay");
-Expect(InternetEvidence.Classify(200, "<html>Login</html>", "Microsoft Connect Test", true) == ProbeOutcome.Captive, "HTTP 200 portal is not internet");
-Expect(InternetEvidence.Classify(302, "", "Microsoft Connect Test", true) == ProbeOutcome.Captive, "redirect is captive");
-Expect(InternetEvidence.Classify(204, "Microsoft Connect Test", "Microsoft Connect Test", true) != ProbeOutcome.Success, "require exact status");
-Expect(InternetEvidence.Classify(200, "Microsoft Connect Test", "Microsoft Connect Test", false) == ProbeOutcome.Captive, "changed endpoint cannot pass");
-Expect(InternetEvidence.Combine(ProbeOutcome.Success, ProbeOutcome.Unavailable) != InternetStatus.Online, "one whitelisted probe is insufficient");
-Expect(await Connectivity.CheckAsync(null) == InternetStatus.Unavailable, "missing campus adapter cannot use Ethernet or VPN");
-var responses = new Dictionary<string, (int Status, string Body)>();
-foreach (var probe in Connectivity.Probes) responses[new Uri(probe.Url).Host] = (200, probe.Body);
-var probeRequests = new List<Uri>();
-using (var client = new HttpClient(new ProbeHandler(request => {
-    probeRequests.Add(request.RequestUri!);
-    Expect(request.Headers.CacheControl?.NoCache == true && request.Headers.CacheControl.NoStore, "uncached network evidence");
-    var response = responses[request.RequestUri!.Host];
-    return new HttpResponseMessage((System.Net.HttpStatusCode)response.Status) { Content = new StringContent(response.Body), RequestMessage = request };
-}))) {
-    Expect(await Connectivity.CheckWithClientAsync(client) == InternetStatus.Online, "both strict responses confirm internet");
-    responses["www.msftconnecttest.com"] = (200, "<html>login required</html>");
-    Expect(await Connectivity.CheckWithClientAsync(client) == InternetStatus.Captive, "authentication expires while secure probe still passes");
-    responses["www.msftconnecttest.com"] = (302, "");
-    Expect(await Connectivity.CheckWithClientAsync(client) == InternetStatus.Captive, "redirect detection in HTTP pipeline");
-    responses["www.msftconnecttest.com"] = (503, ""); responses["www.apple.com"] = (503, "");
-    Expect(await Connectivity.CheckWithClientAsync(client) == InternetStatus.Unavailable, "outage remains unverified");
-    foreach (var probe in Connectivity.Probes) responses[new Uri(probe.Url).Host] = (200, probe.Body);
-    Expect(await Connectivity.CheckWithClientAsync(client) == InternetStatus.Online, "restored authentication passes again");
-}
-Expect(probeRequests.All(uri => uri.Query.Contains("campus_probe=")) && probeRequests.Select(uri => uri.Query).Distinct().Count() == probeRequests.Count, "fresh challenge for every request");
-
-
-Console.WriteLine($"PASS: {checks} checks (validation, retry policy, native ABI, XML, credentials).");
-
-sealed class ProbeHandler(Func<HttpRequestMessage, HttpResponseMessage> reply) : HttpMessageHandler
-{
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        => Task.FromResult(reply(request));
-}
+Expect(await Connectivity.CheckAsync(null) == InternetStatus.Unavailable, "missing campus adapter is offline");
+Expect(await Connectivity.CheckWithPingAsync(() => Task.FromResult(System.Net.NetworkInformation.IPStatus.Success)) == InternetStatus.Online, "ICMP reply is online");
+foreach (var status in new[] { System.Net.NetworkInformation.IPStatus.TimedOut, System.Net.NetworkInformation.IPStatus.DestinationHostUnreachable, System.Net.NetworkInformation.IPStatus.TtlExpired })
+    Expect(await Connectivity.CheckWithPingAsync(() => Task.FromResult(status)) == InternetStatus.Unavailable, "non-success ICMP reply is offline");
+Expect(await Connectivity.CheckWithPingAsync(() => throw new System.Net.NetworkInformation.PingException("fixture")) == InternetStatus.Unavailable, "ping error is offline");
+Expect(await Connectivity.CheckWithPingAsync(() => throw new System.Net.Sockets.SocketException()) == InternetStatus.Unavailable, "DNS error is offline");
+Expect(await Connectivity.CheckWithPingAsync(() => new TaskCompletionSource<System.Net.NetworkInformation.IPStatus>().Task, TimeSpan.FromMilliseconds(20)) == InternetStatus.Unavailable, "hung DNS/ping has a deadline");
+Console.WriteLine($"PASS: {checks} checks (validation, ping, retry policy, native ABI, XML, credentials).");

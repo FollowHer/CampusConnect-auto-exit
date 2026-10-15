@@ -11,7 +11,7 @@ final class CampusProxy {
     private var generation = 0
 
     func start(host: String, additionalHosts: Set<String> = [], completion: @escaping (Result<UInt16, Error>) -> Void) {
-        queue.async {
+        queue.async { [self] in
             self.stopOnQueue()
             let expected = self.generation
             do {

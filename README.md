@@ -1,5 +1,4 @@
 # 校园 Wi-Fi 助手 · CampusConnect
-
 [![Build](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml/badge.svg)](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -7,35 +6,19 @@
 
 分别为 macOS 和 Windows 制作的桌面校园网连接工具。默认校园 Wi-Fi 为 `HNPI-STU`，认证地址为 `http://192.168.0.123`，可在设置中修改。
 
-## Windows 1.4.4 更新
+## 1.5.0 正式版
 
-在「校园网设置」的账号密码下方新增「服务选项（可留空）」。填写学校网页中的完整名称，例如「联通接入服务」，保存后会先选择服务再点击登录。网页没有选项时留空；留空沿用网页默认状态。支持 ePortal 服务菜单和标准下拉框，未找到或未能选中目标服务时提示手动处理，不自动提交。
+- macOS 和 Windows 均支持填写网页中的完整服务选项名称；没有选项时留空。
+- 登录后校验学校返回结果和已登录页面，按钮事件未触发时使用学校原有登录函数补充触发，避免重复提交。
+- 联网状态统一使用 `ping www.baidu.com`。收到回应后显示“已经连接成功”，移除重复的 ping 成功日志；失败或超时判定未联网。
+- 开启自动连接和自动提交时，未联网会按间隔重新认证；Wi-Fi 断开时重新连接。正在登录时等待本次结果，暂停设置继续有效。
+- 清理已废弃的 HTTP 探测及相关状态、无效 Wi-Fi 失败计数和旧脚本标记。保留配置兼容、测试、诊断及第三方许可。
 
-本次仅更新 Windows，发布标签为 `windows-v1.4.4`；macOS 保持 1.4.5。
-
-## macOS 1.4.5 更新
-
-修复首次填写账号密码后没有完成自动点击登录、停留在认证页的问题。填写和提交分开处理，确认学校网页登录流程已启动后才标记已提交；首次点击未到达处理函数时补发一次事件，已启动的登录不会重复提交。页面临时未就绪会继续等待，验证码与校验提示仍由用户处理。新增原生 WKWebView 离线回归检查。
-
-## macOS 1.4.4 更新
-
-- 统一使用网页认证，移除开发版接口认证选项，保留旧版账号密码和网页设置。
-- 同步密码框自动激活及提交前校验；启动后立即尝试连接，已连接校园 Wi-Fi 时跳过全量扫描并提前认证。
-- 失败后持续按间隔重试，减少不必要的等待。兼容 macOS 14+，包含 Apple 芯片和 Intel 两种架构。
-- 已通过核心回归、通用构建与本地签名检查；真实校园网端到端登录和速度仍需实测。
-
-## Windows 1.4.3 更新
-
-- **修复登录时密码无法自动输入**：处理学校认证页密码提示框未激活的情况，自动触发页面焦点或点击处理，无需先手动点击密码框；提交前检查账号密码确实已写入。
-- **优化连接速度**：启动或保存并开启自动连接后立即尝试连接；优先使用已缓存的校园 Wi-Fi 列表，已连接校园网时提前发起认证，减少等待扫描、定时检查和外网探测的时间。
-- 未连通时持续按间隔重试，直到成功、暂停或退出；验证码等特殊表单仍需手动处理。
-- Windows 统一使用网页认证，移除开发版的接口认证选项，保留已保存的账号密码；同时修复 Windows 显示内部 Wi-Fi 配置名的问题。
-
-Windows 安装包为 1.4.4，macOS 通用包为 1.4.5。已通过核心、浏览器回归和安装包校验，实际连接耗时受校园网络及设备影响；尚未完成新版的真实校园网端到端登录验证。
+ping 使用系统路由，可能经过 VPN。Windows x64 与 macOS Apple 芯片 / Intel 通用包；Windows ARM64 可自行构建。平台实机验证范围见 [验证记录](VALIDATION.md)。
 
 ## 下载
 
-**[Windows 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/windows-v1.4.4/CampusConnect-Windows-x64-1.4.4-Setup.exe)** · **[macOS 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v1.4.5/CampusConnect-macOS-universal-1.4.5.zip)** · [GitHub 发布版本](https://github.com/Ye9137/CampusConnect/releases) · [Gitee 国内下载](https://gitee.com/lyz9137/CampusConnect/releases)
+**[Windows 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/v1.5.0/CampusConnect-Windows-x64-1.5.0-Setup.exe)** · **[macOS 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v1.5.0/CampusConnect-macOS-universal-1.5.0.zip)** · [GitHub 发布版本](https://github.com/Ye9137/CampusConnect/releases) · [Gitee 国内下载](https://gitee.com/lyz9137/CampusConnect/releases)
 
 ## 界面预览
 
@@ -119,7 +102,7 @@ Windows 安装版提供自定义安装目录、可选桌面快捷方式（默认
 
 ## Windows 1.2.4 性能优化
 
-Windows 版将无线扫描、连接和 SSID 检查移到后台；启动时先显示缓存网络，再更新扫描结果。界面仅更新有变化且正在显示的列表，合并状态及认证页位置通知，并复用浏览器环境。启用 ReadyToRun 预编译后，继续保持单文件分发。这段记录描述 1.2.4 的改动；当前 Windows 版本为 1.4.3，macOS 版本为 1.4.5。
+Windows 版将无线扫描、连接和 SSID 检查移到后台；启动时先显示缓存网络，再更新扫描结果。界面仅更新有变化且正在显示的列表，合并状态及认证页位置通知，并复用浏览器环境。启用 ReadyToRun 预编译后，继续保持单文件分发。这段记录描述 1.2.4 的改动；当前两端版本均为 1.5.0。
 
 ## 1.2.3 认证页适配
 

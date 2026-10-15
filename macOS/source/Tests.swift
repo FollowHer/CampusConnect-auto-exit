@@ -13,6 +13,7 @@ import JavaScriptCore
         defer { try? FileManager.default.removeItem(at: localDirectory) }
         var storedProfile = CampusProfile()
         storedProfile.username = "test-account"
+        storedProfile.serviceOption = "联通接入服务"
         let secrets = Secrets(wifi: "test-wifi", portal: "test-portal")
         try LocalStore.save(profile: storedProfile, secrets: secrets, directory: localDirectory)
         let reloaded = try LocalStore.load(directory: localDirectory)
@@ -41,6 +42,16 @@ import JavaScriptCore
         expect(preserved == secrets.portal, "settings updates retain stored passwords")
         let preservedProfile = try LocalStore.load(directory: localDirectory).profile
         expect(!preservedProfile.automatic, "local storage preserves paused automation")
+        let oldProfile = try JSONDecoder().decode(CampusProfile.self, from: Data("{}".utf8))
+        expect(oldProfile.serviceOption.isEmpty, "old configurations default to blank service")
+        expect(PortalFillRetry.shouldRetry(result: "missing-service", scriptFailed: false, attempt: 1), "wait for delayed service options")
+        expect(!PortalFillRetry.shouldRetry(result: "missing-service", scriptFailed: false, attempt: 200), "service waiting is bounded")
+        var escapingProfile = CampusProfile()
+        escapingProfile.serviceOption = "联通接入服务'\"\n"
+        let serviceScript = try PortalScript.build(profile: escapingProfile, password: "dummy")
+        let payload = serviceScript.components(separatedBy: "const cfg = ")[1].components(separatedBy: ";")[0]
+        let serviceJSON = try JSONSerialization.jsonObject(with: Data(payload.utf8)) as! [String: Any]
+        expect(serviceJSON["serviceOption"] as? String == escapingProfile.serviceOption, "service option JSON escaping")
         var profile = CampusProfile()
         try profile.validate()
         expect(profile.ssid == "HNPI-STU", "target SSID default")
@@ -69,7 +80,6 @@ import JavaScriptCore
         expect(!policy.shouldJoin(enabled: true, target: "HNPI-STU", current: nil, visible: ["HNPI-STU"], busy: false, now: now.addingTimeInterval(59)), "retry cooldown")
         expect(policy.shouldJoin(enabled: true, target: "HNPI-STU", current: nil, visible: ["HNPI-STU"], busy: false, now: now.addingTimeInterval(61)), "retry after cooldown")
         for i in 1...1000 {
-            policy.fail()
             let retryAt = now.addingTimeInterval(Double(60 * i))
             expect(policy.shouldJoin(enabled: true, target: "HNPI-STU", current: nil, visible: ["HNPI-STU"], busy: false, now: retryAt), "Wi-Fi retries without a failure limit")
             policy.begin(at: retryAt)
@@ -83,7 +93,7 @@ import JavaScriptCore
         expect(!recovery.shouldAuthenticate(enabled: true, portalEnabled: false, now: now), "startup respects disabled portal")
         recovery.observe(.online)
         expect(!recovery.shouldAuthenticate(enabled: true, portalEnabled: true, now: now), "online does not reauthenticate")
-        recovery.observe(.captive)
+        recovery.observe(.unavailable)
         expect(recovery.shouldAuthenticate(enabled: true, portalEnabled: true, now: now), "same SSID expired authentication recovers")
         recovery.begin(at: now)
         expect(!recovery.shouldAuthenticate(enabled: true, portalEnabled: true, now: now.addingTimeInterval(20)), "no duplicate submissions every heartbeat")
@@ -96,7 +106,7 @@ import JavaScriptCore
         recovery.observe(.online)
         expect(recovery.attempts == 0, "internet success resets attempts")
         recovery.observe(.unavailable)
-        expect(!recovery.shouldAuthenticate(enabled: true, portalEnabled: true, now: now), "single timeout does not disrupt authentication")
+        expect(recovery.shouldAuthenticate(enabled: true, portalEnabled: true, now: now), "first failed ping triggers recovery")
         recovery.observe(.unavailable)
         expect(recovery.shouldAuthenticate(enabled: true, portalEnabled: true, now: now), "repeated failures recover")
         var authenticationTime = now
@@ -108,13 +118,12 @@ import JavaScriptCore
         }
         recovery.reset()
         expect(recovery.shouldAuthenticate(enabled: true, portalEnabled: true, now: now), "new connection resets first authentication delay")
-        expect(InternetEvidence.classify(status: 200, body: "<html>Login</html>", expectedBody: "Microsoft Connect Test", sameEndpoint: true) == .captive, "HTTP 200 login is not internet")
-        expect(InternetEvidence.classify(status: 302, body: "", expectedBody: "Microsoft Connect Test", sameEndpoint: true) == .captive, "redirect is captive")
-        expect(InternetEvidence.classify(status: 204, body: "Microsoft Connect Test", expectedBody: "Microsoft Connect Test", sameEndpoint: true) != .success, "strict status")
-        expect(InternetEvidence.classify(status: 200, body: "Microsoft Connect Test", expectedBody: "Microsoft Connect Test", sameEndpoint: false) == .captive, "changed endpoint cannot pass")
-        expect(InternetEvidence.combine([.success, .unavailable]) != .online, "one whitelisted endpoint is insufficient")
-        expect(InternetEvidence.combine([.success, .success]) == .online, "both probes confirm internet")
-        expect(InternetEvidence.combine([.success, .captive]) == .captive, "captive evidence beats one successful probe")
+        expect(Connectivity.runPing(executable: "/usr/bin/true", arguments: []) == .online, "successful ping exit is online")
+        expect(Connectivity.runPing(executable: "/usr/bin/false", arguments: []) == .unavailable, "failed ping exit is offline")
+        expect(Connectivity.runPing(executable: "/missing/campus-ping", arguments: []) == .unavailable, "launch failure is offline")
+        let pingStart = Date()
+        expect(Connectivity.runPing(executable: "/bin/sleep", arguments: ["10"], timeout: 0.05) == .unavailable, "hung ping times out")
+        expect(Date().timeIntervalSince(pingStart) < 3, "timeout stops child promptly")
 
         profile.username = "test-account'\\\"\n"
         let password = "test'\\\"\n</script>"

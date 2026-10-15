@@ -36,31 +36,15 @@ public sealed record CampusProfile
 
 public sealed class AutoPolicy
 {
-    public int Failures { get; private set; }
     public DateTimeOffset LastAttempt { get; private set; } = DateTimeOffset.MinValue;
     public bool ShouldJoin(bool enabled, string target, string? current, IEnumerable<string> visible, bool busy, DateTimeOffset now)
         => enabled && target.Length > 0 && current != target && visible.Contains(target, StringComparer.Ordinal)
             && !busy && now - LastAttempt >= TimeSpan.FromSeconds(60);
     public void Begin(DateTimeOffset now) => LastAttempt = now;
-    public void Fail() { if (Failures < int.MaxValue) Failures++; }
-    public void Success() => Failures = 0;
-    public void Reset() { Failures = 0; LastAttempt = DateTimeOffset.MinValue; }
+    public void Reset() { LastAttempt = DateTimeOffset.MinValue; }
 }
 
-public enum InternetStatus { Online, Captive, Unavailable }
-public enum ProbeOutcome { Success, Captive, Unavailable }
-public static class InternetEvidence
-{
-    public static ProbeOutcome Classify(int status, string body, string expectedBody, bool sameEndpoint)
-    {
-        if (!sameEndpoint || status is >= 300 and < 400) return ProbeOutcome.Captive;
-        if (status != 200) return ProbeOutcome.Unavailable;
-        return string.Equals(body.Trim(), expectedBody, StringComparison.OrdinalIgnoreCase) ? ProbeOutcome.Success : ProbeOutcome.Captive;
-    }
-    public static InternetStatus Combine(params ProbeOutcome[] probes)
-        => probes.Contains(ProbeOutcome.Captive) ? InternetStatus.Captive :
-            probes.Length == 2 && probes.All(p => p == ProbeOutcome.Success) ? InternetStatus.Online : InternetStatus.Unavailable;
-}
+public enum InternetStatus { Online, Unavailable }
 public sealed class PortalRecovery
 {
     public int Failures { get; private set; }
@@ -75,7 +59,7 @@ public sealed class PortalRecovery
         State = result;
     }
     public bool ShouldAuthenticate(bool enabled, bool portalEnabled, DateTimeOffset now)
-        => enabled && portalEnabled && State != InternetStatus.Online && ((Attempts == 0 && Failures == 0) || State == InternetStatus.Captive || Failures >= 2)
+        => enabled && portalEnabled && State != InternetStatus.Online && ((Attempts == 0 && Failures == 0) || Failures >= 1)
             && now - LastAttempt >= RetryDelay;
     public void Begin(DateTimeOffset now) { LastAttempt = now; Attempts = Math.Min(4, Attempts + 1); }
     public void Reset() { Failures = 0; Attempts = 0; LastAttempt = DateTimeOffset.MinValue; State = InternetStatus.Unavailable; }
@@ -83,12 +67,12 @@ public sealed class PortalRecovery
 
 public static class PortalScript
 {
-    public static string Build(CampusProfile profile, string password)
+    public static string Build(CampusProfile profile, string password, bool statusOnly = false)
     {
         var origin = CampusProfile.Origin(profile.PortalUrl) ?? throw new InvalidOperationException("认证地址无效。");
         var payload = JsonSerializer.Serialize(new {
             origin, username = profile.Username, password, serviceOption = profile.ServiceOption, userSelector = profile.UserSelector,
-            passwordSelector = profile.PasswordSelector, submitSelector = profile.SubmitSelector, submit = profile.AutoSubmit
+            passwordSelector = profile.PasswordSelector, submitSelector = profile.SubmitSelector, submit = profile.AutoSubmit, confirmSubmit = true, statusOnly
         });
         using var stream = typeof(PortalScript).Assembly.GetManifestResourceStream("CampusConnect.PortalTemplate.js")
             ?? throw new InvalidOperationException("缺少认证脚本。");
