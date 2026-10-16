@@ -1,5 +1,14 @@
 # 校园 Wi-Fi 助手 · CampusConnect
 
+> [!IMPORTANT]
+> **适配范围与交流反馈**
+>
+> 本程序目前仅在 **河南工业职业技术大学** 的校园网认证中完美通关，尚未对其他学校的校园网进行适配。
+>
+> 如果需要适配，可以关注我的抖音并进入群聊，发送 **连接失败的完整视频** 以及 **学校名称**。看到之后，我会在最快时间完成适配。
+>
+> **抖音：3325725312q**，或者添加本人 **QQ：3325725312**。欢迎学习交流！
+
 Windows 最新版为 **1.5.1**：修复长时间后台后重新打开界面空白，增加自动刷新和浏览器故障恢复，保留当前页及未保存设置。详见 [Windows 更新说明](Windows/1.5.1-更新说明.md)。macOS 保持 **1.5.0**。
 [![Build](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml/badge.svg)](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
