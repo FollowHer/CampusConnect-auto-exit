@@ -106,6 +106,7 @@
       if (select.selectedOptions[0] !== option || select.disabled) return 'missing-service';
     }
   }
+  /*CAMPUS_AGREEMENTS*/
   // School handlers can reject/reset a value; never report success or submit it.
   if (!editable(user) || !editable(pass) || !visible(user) || !visible(pass) ||
       user.value !== cfg.username || pass.value !== cfg.password) return 'missing-fields';

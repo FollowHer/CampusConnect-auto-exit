@@ -53,6 +53,46 @@ foreach (var type in new[] { System.Net.NetworkInformation.NetworkInterfaceType.
     Expect(!CampusNetwork.IsWiredInterface(type, System.Net.NetworkInformation.OperationalStatus.Up), "non-Ethernet rejected");
 // This call must work even on macOS, where Windows WLAN APIs cannot load.
 _ = await CampusNetwork.IsAvailableAsync(wired);
+// Each wired method bypasses WLAN and uses the chosen interface, even before an IP is assigned.
+var fakeEthernet = Guid.NewGuid();
+var wifiReads = 0; var wiredReads = 0;
+Expect(await CampusNetwork.IsAvailableAsync(wired, () => { wiredReads++; return fakeEthernet; }, _ => { wifiReads++; throw new Exception("WLAN must not load"); }), "wired branch works without WLAN");
+Expect(wifiReads == 0 && wiredReads == 1, "wired does not read Wi-Fi");
+Expect(!await CampusNetwork.IsAvailableAsync(wired, () => null, _ => Task.FromResult<string?>("HNPI-STU")), "active Wi-Fi cannot replace missing Ethernet");
+Expect(await CampusNetwork.IsAvailableAsync(profile, () => throw new Exception("wrong branch"), _ => Task.FromResult<string?>("HNPI-STU")), "Wi-Fi ignores wired interfaces");
+var linkA = new NetworkLink(fakeEthernet, "Ethernet A", System.Net.NetworkInformation.NetworkInterfaceType.Ethernet, System.Net.NetworkInformation.OperationalStatus.Up);
+var linkB = linkA with { Id = Guid.NewGuid(), Name = "Ethernet B" };
+Expect(CampusNetwork.SelectEthernet("Ethernet B", [linkA, linkB])?.Id == linkB.Id, "exact selected Ethernet interface");
+Expect(CampusNetwork.SelectEthernet("Missing", [linkA]) is null, "missing interface cannot fall back to another network");
+Expect(CampusNetwork.SelectEthernet("", [linkA])?.Id == fakeEthernet, "link detected without a DHCP address");
+Expect(CampusNetwork.SelectEthernet("", [linkA with { Status = System.Net.NetworkInformation.OperationalStatus.Down }]) is null, "unplugged link rejected");
+var pppLink = linkA with { Type = System.Net.NetworkInformation.NetworkInterfaceType.Ppp, Name = "School broadband" };
+Expect(CampusNetwork.SelectPpp("School broadband", [pppLink]) is not null, "matching dial-up interface recognized");
+Expect(CampusNetwork.SelectPpp("Other", [pppLink]) is null, "other VPN or dial-up interface cannot replace selected PPPoE");
+var entries = WiredAuthentication.ParsePhonebook("[VPN]\nType=2\n[School broadband]\nType=5\n[拨号]\nType=1\n", "/test/rasphone.pbk");
+Expect(entries.Count == 1 && entries[0].Name == "School broadband", "only broadband phonebook entries selectable");
+var dialProfile = wired with { WiredAuth = "pppoe", BroadbandName = "School broadband", Username = "never-a-command-argument", PortalUrl = "unused" };
+dialProfile.Validate();
+Expect(dialProfile.UsesSystemAuthentication && !dialProfile.UsesWebPortal, "PPPoE does not require portal credentials");
+var dialCommand = WiredAuthentication.BuildCommand(dialProfile, "Ethernet A", entries, "/system");
+Expect(Path.GetFileName(dialCommand.Executable) == "rasdial.exe", "PPPoE invokes Windows dialer");
+Expect(dialCommand.Arguments.SequenceEqual(new[] { "School broadband", "/PHONEBOOK:/test/rasphone.pbk" }), "dialer receives only existing profile and phonebook path");
+Expect(!string.Join(" ", dialCommand.Arguments).Contains(dialProfile.Username), "no credential in command arguments");
+var dot1x = wired with { WiredAuth = "dot1x", EthernetName = "Campus Ethernet & 2", PortalUrl = "unused" };
+dot1x.Validate();
+var dotCommand = WiredAuthentication.BuildCommand(dot1x, dot1x.EthernetName, [], "/system");
+Expect(dotCommand.Arguments.SequenceEqual(new[] { "lan", "reconnect", "interface=Campus Ethernet & 2" }), "802.1X targets only selected interface as one argument");
+try { WiredAuthentication.BuildCommand(dot1x, "", [], "/system"); throw new Exception("reconnect-all accepted"); } catch (InvalidOperationException) { checks++; }
+try { WiredAuthentication.BuildCommand(dialProfile with { BroadbandName = "VPN" }, "", entries, "/system"); throw new Exception("VPN accepted as PPPoE"); } catch (InvalidOperationException) { checks++; }
+foreach (var method in new[] { "web", "pppoe", "dot1x", "client" }) {
+    var configured = wired with { WiredAuth = method, BroadbandName = "School broadband", AuthenticationClient = @"C:\School\client.exe" };
+    configured.Validate();
+    var reload = JsonSerializer.Deserialize<CampusProfile>(JsonSerializer.Serialize(configured))!;
+    Expect(reload.WiredAuth == method && reload.IsWired, "wired method persists");
+}
+Invalid(wired with { WiredAuth = "unknown" });
+Invalid(wired with { WiredAuth = "pppoe" });
+Invalid(wired with { WiredAuth = "client", AuthenticationClient = "https://example.com" });
 Invalid(profile with { Ssid = new string('网', 11) });
 Invalid(profile with { PortalUrl = "javascript:alert(1)" });
 Invalid(profile with { PortalUrl = "https://user:secret@example.com" });
@@ -61,6 +101,10 @@ Expect(CampusProfile.Origin("https://example.com:8443/a") == "https://example.co
 Expect(CampusProfile.Origin("http://[::1]/") == "http://[::1]", "IPv6 origin");
 var policy = new AutoPolicy(); var now = DateTimeOffset.UtcNow;
 Expect(!policy.ShouldJoin(true, "", null, [""], false, now), "wired mode never joins a Wi-Fi network");
+Expect(policy.ShouldPrepareWired(true, true, false, now), "system authentication starts immediately");
+Expect(!policy.ShouldPrepareWired(false, true, false, now), "pause prevents system authentication");
+Expect(!policy.ShouldPrepareWired(true, true, true, now), "no overlapping system authentication");
+Expect(!policy.ShouldPrepareWired(true, false, false, now), "online connection is not repeatedly authenticated");
 Expect(policy.ShouldJoin(true, "HNPI-STU", "Home", ["HNPI-STU"], false, now), "visible target");
 Expect(!policy.ShouldJoin(true, "HNPI-STU", null, ["HNPI-STU-fake"], false, now), "exact SSID");
 Expect(!policy.ShouldJoin(false, "HNPI-STU", null, ["HNPI-STU"], false, now), "pause");
@@ -92,6 +136,7 @@ using var json = JsonDocument.Parse(payload);
 Expect(json.RootElement.GetProperty("password").GetString() == secret, "credential JSON escaping");
 Expect(json.RootElement.GetProperty("serviceOption").GetString() == secret, "service option JSON escaping");
 Expect(!script.Contains("/*CAMPUS_CONFIG*/"), "embedded resource substituted");
+Expect(!script.Contains("/*CAMPUS_AGREEMENTS*/") && script.Contains("__campusAgreementAttempts"), "Windows agreement resource injected into generated script");
 if (args.Length == 1) File.WriteAllText(args[0], script);
 
 Expect(DesktopBridge.IsTrustedSource("https://campusconnect-ui.invalid/"), "trust exact embedded UI");

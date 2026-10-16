@@ -8,7 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>CampusConnect</AssemblyName>
-    <Version>1.5.2</Version>
+    <Version>1.5.3</Version>
     <ApplicationIcon>AppIcon.ico</ApplicationIcon>
     <PublishSingleFile>true</PublishSingleFile>
     <PublishReadyToRun>true</PublishReadyToRun>
@@ -18,11 +18,12 @@
     <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
-    <Description>校园 Wi-Fi 助手 Windows 版</Description>
+    <Description>校园网助手 Windows 版</Description>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
     <EmbeddedResource Include="PortalTemplate.js" />
+    <EmbeddedResource Include="PortalAgreements.js" />
     <EmbeddedResource Include="../../macOS/source/PortalBootstrap.js" LogicalName="CampusConnect.PortalBootstrap.js" />
     <EmbeddedResource Include="Desktop.html" />
   </ItemGroup>

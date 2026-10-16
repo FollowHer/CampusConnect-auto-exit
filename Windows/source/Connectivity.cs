@@ -28,27 +28,42 @@ internal static class Connectivity
     }
 }
 
-// Wired mode never calls WLAN APIs, so PCs without a wireless adapter can authenticate.
+internal sealed record NetworkLink(Guid Id, string Name, NetworkInterfaceType Type, OperationalStatus Status);
+
+// Ethernet link detection must work before DHCP / PPPoE / 802.1X has supplied an IP address.
 internal static class CampusNetwork
 {
     internal static bool IsWiredInterface(NetworkInterfaceType type, OperationalStatus status)
         => status == OperationalStatus.Up && type is NetworkInterfaceType.Ethernet
             or NetworkInterfaceType.GigabitEthernet or NetworkInterfaceType.FastEthernetFx
             or NetworkInterfaceType.FastEthernetT;
-
-    public static Guid? ReadWiredInterface()
+    public static IReadOnlyList<NetworkLink> ReadLinks()
     {
         try {
-            return NetworkInterface.GetAllNetworkInterfaces()
-                .Where(n => IsWiredInterface(n.NetworkInterfaceType, n.OperationalStatus)
-                    && n.GetIPProperties().UnicastAddresses.Any(a => !System.Net.IPAddress.IsLoopback(a.Address)))
-                .Select(n => Guid.TryParse(n.Id, out var id) ? (Guid?)id : null)
-                .FirstOrDefault(id => id is not null);
-        } catch (NetworkInformationException) { return null; }
+            return NetworkInterface.GetAllNetworkInterfaces().Where(n => Guid.TryParse(n.Id, out _))
+                .Select(n => new NetworkLink(Guid.Parse(n.Id), n.Name, n.NetworkInterfaceType, n.OperationalStatus)).ToArray();
+        } catch (NetworkInformationException) { return []; }
     }
-    public static async Task<bool> IsAvailableAsync(CampusProfile profile)
-        => profile.IsWired ? ReadWiredInterface() is not null
-            : profile.MatchesNetwork(await WifiService.ReadCurrentAsync(profile.Ssid), false);
+    internal static NetworkLink? SelectEthernet(string preferred, IEnumerable<NetworkLink> links)
+        => links.FirstOrDefault(n => IsWiredInterface(n.Type, n.Status)
+            && (string.IsNullOrEmpty(preferred) || n.Name.Equals(preferred, StringComparison.OrdinalIgnoreCase)));
+    internal static NetworkLink? SelectPpp(string name, IEnumerable<NetworkLink> links)
+        => links.FirstOrDefault(n => n.Type == NetworkInterfaceType.Ppp && n.Status == OperationalStatus.Up
+            && !string.IsNullOrWhiteSpace(name) && n.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+    public static Guid? ReadWiredInterface() => SelectEthernet("", ReadLinks())?.Id;
+    public static NetworkLink? ReadPhysicalLink(CampusProfile profile) => SelectEthernet(profile.WiredAuth == "pppoe" ? "" : profile.EthernetName, ReadLinks());
+    public static Guid? ReadWiredInterface(CampusProfile profile)
+    {
+        var links = ReadLinks();
+        var ethernet = SelectEthernet(profile.WiredAuth == "pppoe" ? "" : profile.EthernetName, links);
+        return ethernet is null ? null : profile.WiredAuth == "pppoe" ? SelectPpp(profile.BroadbandName, links)?.Id : ethernet.Id;
+    }
+    public static Task<bool> IsAvailableAsync(CampusProfile profile)
+        => IsAvailableAsync(profile, () => ReadWiredInterface(profile), WifiService.ReadCurrentAsync);
+    internal static async Task<bool> IsAvailableAsync(CampusProfile profile,
+        Func<Guid?> readWired, Func<string?, Task<string?>> readWifi)
+        => profile.IsWired ? readWired() is not null
+            : profile.MatchesNetwork(await readWifi(profile.Ssid), false);
     public static Task<Guid?> ReadInterfaceAsync(CampusProfile profile)
-        => profile.IsWired ? Task.FromResult(ReadWiredInterface()) : WifiService.ReadInterfaceAsync(profile.Ssid);
+        => profile.IsWired ? Task.FromResult(ReadWiredInterface(profile)) : WifiService.ReadInterfaceAsync(profile.Ssid);
 }

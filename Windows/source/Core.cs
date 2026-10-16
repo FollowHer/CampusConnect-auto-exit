@@ -10,6 +10,18 @@ public sealed record CampusProfile
     public bool IsWired => string.IsNullOrWhiteSpace(Ssid);
     public bool MatchesNetwork(string? currentSsid, bool wiredAvailable)
         => IsWired ? wiredAvailable : currentSsid == Ssid;
+    public string WiredAuth { get; init; } = "web";
+    public string EthernetName { get; init; } = "";
+    public string BroadbandName { get; init; } = "";
+    public string AuthenticationClient { get; init; } = "";
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool UsesSystemAuthentication => IsWired && WiredAuth != "web";
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool UsesWebPortal => PortalEnabled && !UsesSystemAuthentication;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string ConnectionLabel => !IsWired ? "Wi-Fi" : WiredAuth switch {
+        "pppoe" => "有线 · PPPoE 拨号", "dot1x" => "有线 · 802.1X", "client" => "有线 · 专用客户端", _ => "有线 · 网页认证"
+    };
     public bool UseSavedWifiProfile { get; init; }
     public bool PortalEnabled { get; init; } = true;
     public string PortalUrl { get; init; } = "http://192.168.0.123";
@@ -33,7 +45,14 @@ public sealed record CampusProfile
     {
         if (!IsWired && Encoding.UTF8.GetByteCount(Ssid) > 32)
             throw new InvalidOperationException("Wi-Fi 名称最多为 32 字节；有线模式请留空。");
-        if (PortalEnabled && Origin(PortalUrl) is null)
+        if (WiredAuth is not ("web" or "pppoe" or "dot1x" or "client"))
+            throw new InvalidOperationException("请选择有效的有线认证方式。");
+        if (IsWired && WiredAuth == "pppoe" && (string.IsNullOrWhiteSpace(BroadbandName) || BroadbandName.Any(char.IsControl)))
+            throw new InvalidOperationException("请填写或选择 Windows 中已配置的 PPPoE 宽带连接名称。");
+        if (IsWired && WiredAuth == "client" && (string.IsNullOrWhiteSpace(AuthenticationClient) || !AuthenticationClient.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("请先选择学校认证客户端的 EXE 文件。");
+        if (EthernetName.Any(char.IsControl)) throw new InvalidOperationException("以太网接口名称无效。");
+        if (UsesWebPortal && Origin(PortalUrl) is null)
             throw new InvalidOperationException("请输入 http:// 或 https:// 开头的认证地址，不能在地址中包含账号密码。");
     }
 }
@@ -44,6 +63,8 @@ public sealed class AutoPolicy
     public bool ShouldJoin(bool enabled, string target, string? current, IEnumerable<string> visible, bool busy, DateTimeOffset now)
         => enabled && target.Length > 0 && current != target && visible.Contains(target, StringComparer.Ordinal)
             && !busy && now - LastAttempt >= TimeSpan.FromSeconds(60);
+    public bool ShouldPrepareWired(bool enabled, bool needed, bool busy, DateTimeOffset now)
+        => enabled && needed && !busy && now - LastAttempt >= TimeSpan.FromSeconds(60);
     public void Begin(DateTimeOffset now) => LastAttempt = now;
     public void Reset() { LastAttempt = DateTimeOffset.MinValue; }
 }
@@ -81,6 +102,10 @@ public static class PortalScript
         using var stream = typeof(PortalScript).Assembly.GetManifestResourceStream("CampusConnect.PortalTemplate.js")
             ?? throw new InvalidOperationException("缺少认证脚本。");
         using var reader = new StreamReader(stream);
-        return reader.ReadToEnd().Replace("/*CAMPUS_CONFIG*/", payload, StringComparison.Ordinal);
+        using var agreementStream = typeof(PortalScript).Assembly.GetManifestResourceStream("CampusConnect.PortalAgreements.js")
+            ?? throw new InvalidOperationException("缺少登录勾选脚本。");
+        using var agreementReader = new StreamReader(agreementStream);
+        return reader.ReadToEnd().Replace("/*CAMPUS_CONFIG*/", payload, StringComparison.Ordinal)
+            .Replace("  /*CAMPUS_AGREEMENTS*/", agreementReader.ReadToEnd().TrimEnd(), StringComparison.Ordinal);
     }
 }

@@ -10,7 +10,8 @@ const macScript = core.slice(core.indexOf('        (() => {'), core.indexOf('   
   .split('\n').map(line => line.startsWith('        ') ? line.slice(8) : line).join('\n')
   .replace('\\(json)', '/*CAMPUS_CONFIG*/').replaceAll('\\\\', '\\');
 // Both platforms share credential and service selection behavior.
-assert.equal(macScript, template);
+// The common credential flow stays unchanged; the new Windows-only checkbox hook is tested separately.
+assert.equal(macScript, template.replace('  /*CAMPUS_AGREEMENTS*/\n', ''));
 const cfg = {origin:'http://portal.test', username:'test-account\'"', password:'test-password\'"',
   userSelector:'', passwordSelector:'', submitSelector:'', submit:true};
 const script = overrides => template.replace('/*CAMPUS_CONFIG*/', JSON.stringify({...cfg, ...overrides}));

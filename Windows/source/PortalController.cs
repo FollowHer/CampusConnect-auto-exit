@@ -251,6 +251,10 @@ internal sealed class PortalController
                 case "missing-submit":
                     RequiresInteraction = true; finished = true; password = ""; Status?.Invoke("账号密码已填写，未识别可用的认证按钮，请手动点击或检查按钮选择器。"); return;
                 case "missing-fields" when attempt < 80: await Task.Delay(150); continue;
+                case "waiting-agreement" when attempt < 80: await Task.Delay(150); continue;
+                case "waiting-agreement": case "agreement-required":
+                    RequiresInteraction = true; finished = true; password = "";
+                    Status?.Invoke("网页必选勾选项尚未确认，请在认证页完成协议阅读或手动勾选后重试。"); return;
                 case "manual-required": RequiresInteraction = true; finished = true; password = ""; Status?.Invoke("学校要求验证码或运营商信息，请在认证页补充。"); return;
                 case "waiting-ready": finished = true; password = ""; Status?.Invoke("学校认证参数尚未就绪，请检查页面后重试。"); return;
                 case "invalid-selector": RequiresInteraction = true; Status?.Invoke("CSS 选择器无效，请修改高级设置。"); return;
