@@ -44,7 +44,7 @@ ping 使用系统路由，可能经过 VPN。Windows x64 与 macOS Apple 芯片 
 
 ## 界面预览
 
-以下为 Windows 1.3.5 界面预览，展示未连接状态；账号、密码均为空。实际学校认证页面会在连接校园网后加载。
+以下为 Windows 1.5.2 界面预览，使用当前版本的内置界面离线生成，展示未连接状态；账号、密码均为空。实际学校认证页面会在连接校园网后加载。
 
 ### 网络概览
 
@@ -54,7 +54,7 @@ ping 使用系统路由，可能经过 VPN。Windows x64 与 macOS Apple 芯片 
 
 ### 校园网设置
 
-配置校园 Wi-Fi、认证地址、账号信息和开机自启。
+配置校园 Wi-Fi、认证地址、账号信息和开机自启。服务选项按学校认证网页填写；网页没有选项时留空。
 
 ![Windows 校园网设置](docs/screenshots/windows-settings.png)
 
@@ -63,6 +63,16 @@ ping 使用系统路由，可能经过 VPN。Windows x64 与 macOS Apple 芯片 
 打开学校认证页面，填写登录信息并检查上网状态。
 
 ![Windows 上网认证](docs/screenshots/windows-portal.png)
+
+### 有线模式
+
+在「校园网设置」清空 Wi-Fi 名称，填写认证地址和上网账号密码后保存。无需 Wi-Fi 密码或定位授权；接好网线后点击「立即连接」，也可开启自动连接。
+
+![Windows 有线模式设置](docs/screenshots/windows-wired-settings.png)
+
+网络概览会显示「有线网络」及当前状态。下图展示尚未连接网线时的提示。
+
+![Windows 有线模式网络概览](docs/screenshots/windows-wired-dashboard.png)
 
 ## Windows 1.3.5 更新
 
