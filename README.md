@@ -9,13 +9,22 @@
 >
 > **抖音：3325725312q**，或者添加本人 **QQ：3325725312**。欢迎学习交流！
 
-Windows 最新版为 **1.5.1**：修复长时间后台后重新打开界面空白，增加自动刷新和浏览器故障恢复，保留当前页及未保存设置。详见 [Windows 更新说明](Windows/1.5.1-更新说明.md)。macOS 保持 **1.5.0**。
+Windows 和 macOS 最新版为 **1.5.2**：新增有线模式，**Wi-Fi 名称留空**即可使用有线网络进行校园网网页认证。Windows 保留 [1.5.1 后台恢复修复](Windows/1.5.1-更新说明.md)。
 [![Build](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml/badge.svg)](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 由 [Ye9137](https://github.com/Ye9137) 维护，使用 MIT 许可证开源。
 
 分别为 macOS 和 Windows 制作的桌面校园网连接工具。默认校园 Wi-Fi 为 `HNPI-STU`，认证地址为 `http://192.168.0.123`，可在设置中修改。
+
+## 1.5.2 有线模式
+
+- 在「校园网设置」将 **Wi-Fi 名称清空**，填写认证页面地址、上网账号和密码后保存，即为有线模式；接好网线后点击「立即连接」或开启自动连接。
+- 有线模式无需无线网卡、Wi-Fi 密码或定位授权，不扫描、连接 Wi-Fi；未检测到有线连接时会提示插好网线。
+- 保留自动填写、登录结果校验、断线后按间隔重新认证和暂停功能。认证网址仍须与保存地址的协议、主机和端口匹配。
+- 填回 Wi-Fi 名称即可切回原有模式；原配置不会被自动改成有线模式。
+- macOS 的认证请求在有线模式使用以太网，在 Wi-Fi 模式使用 Wi-Fi。Windows 浏览器和两平台的 ping 使用系统路由，多网卡 / VPN 环境需确保校园认证地址可达。
+- 构建和自动化回归不代表学校有线网络已实测通过；真实有线认证、USB 网卡和拔插恢复仍需在校园网络验证。
 
 ## 1.5.0 正式版
 
@@ -29,7 +38,7 @@ ping 使用系统路由，可能经过 VPN。Windows x64 与 macOS Apple 芯片 
 
 ## 下载
 
-**[Windows 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/windows-v1.5.1/CampusConnect-Windows-x64-1.5.1-Setup.exe)** · **[macOS 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v1.5.0/CampusConnect-macOS-universal-1.5.0.zip)** · [GitHub 发布版本](https://github.com/Ye9137/CampusConnect/releases) · [Gitee 国内下载](https://gitee.com/lyz9137/CampusConnect/releases)
+**[Windows 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/v1.5.2/CampusConnect-Windows-x64-1.5.2-Setup.exe)** · **[macOS 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v1.5.2/CampusConnect-macOS-universal-1.5.2.zip)** · [GitHub 发布版本](https://github.com/Ye9137/CampusConnect/releases) · [Gitee 国内下载](https://gitee.com/lyz9137/CampusConnect/releases)
 
 ## 界面预览
 
@@ -96,14 +105,14 @@ Windows 安装版提供自定义安装目录、可选桌面快捷方式（默认
 
 ## 使用
 
-1. 打开对应系统版本，允许系统读取 Wi-Fi 所需的定位权限。
-2. 在「校园网设置」填写 Wi-Fi 名称、认证网址和校园账号密码，保存。
+1. 打开对应系统版本；Wi-Fi 模式需要允许读取 Wi-Fi 名称的定位权限，有线模式无需此权限。
+2. 在「校园网设置」填写认证网址和校园账号密码；Wi-Fi 模式填写网络名称，**有线模式将 Wi-Fi 名称留空**，保存。
 3. 点击「立即连接」，在「上网认证」查看学校网页的结果。
 4. 需要持续运行时，在设置中启用自动连接。关闭窗口后程序留在菜单栏 / 系统托盘；选择「退出」后停止。
 
 自动连接每 20 秒检查一次，仅连接名称完全匹配且可见的 Wi-Fi；两次连接尝试至少间隔 60 秒。Windows 1.4.3 与 macOS 1.4.4 均持续按间隔重试，直到成功或用户暂停。每次打开认证页最多自动提交一次，避免反复提交错误密码。验证码、运营商选择或多步登录需在页面中手动完成。
 
-认证信息只在当前连接的 Wi-Fi 与设置匹配、网页协议 / 主机 / 端口与保存地址一致时自动填写。学校网页跳转到其他地址时，确认后更新设置再试。
+认证信息只在已接入有线网络（有线模式）或当前 Wi-Fi 名称与设置匹配（Wi-Fi 模式），且网页协议 / 主机 / 端口与保存地址一致时自动填写。学校网页跳转到其他地址时，确认后更新设置再试。
 
 ## Windows 1.3.0
 
@@ -113,7 +122,7 @@ Windows 安装版提供自定义安装目录、可选桌面快捷方式（默认
 
 ## Windows 1.2.4 性能优化
 
-Windows 版将无线扫描、连接和 SSID 检查移到后台；启动时先显示缓存网络，再更新扫描结果。界面仅更新有变化且正在显示的列表，合并状态及认证页位置通知，并复用浏览器环境。启用 ReadyToRun 预编译后，继续保持单文件分发。这段记录描述 1.2.4 的改动；当前 Windows 为 1.5.1，macOS 为 1.5.0。
+Windows 版将无线扫描、连接和 SSID 检查移到后台；启动时先显示缓存网络，再更新扫描结果。界面仅更新有变化且正在显示的列表，合并状态及认证页位置通知，并复用浏览器环境。启用 ReadyToRun 预编译后，继续保持单文件分发。这段记录描述 1.2.4 的改动；当前 Windows 和 macOS 均为 1.5.2。
 
 ## 1.2.3 认证页适配
 
@@ -126,10 +135,11 @@ Windows 版将无线扫描、连接和 SSID 检查移到后台；启动时先显
 | 功能 | macOS | Windows |
 | --- | --- | --- |
 | 开放 Wi-Fi + 网页认证 | 支持 | 支持 |
+| 有线网络 + 网页认证（Wi-Fi 名称留空） | 支持 | 支持 |
 | Wi-Fi 密码 / 企业认证 | 在应用设置中填写 | 先在 Windows 设置中连接并保存，应用复用系统配置 |
 | 密码保存 | 用户目录本地文件，权限 600 | Windows 当前用户 DPAPI 加密 |
 | 认证页面 | WebKit 临时会话 | WebView2 隐私会话，需要 WebView2 Runtime |
-| 认证页直连 | 应用内代理绑定物理 Wi-Fi | 应用浏览器绕过显式 HTTP 代理；VPN 路由仍由 Windows 决定 |
+| 认证页直连 | 应用内代理按模式使用 Wi-Fi / 以太网 | 应用浏览器绕过显式 HTTP 代理；VPN 路由仍由 Windows 决定 |
 | CPU | arm64 + x86_64 通用包 | 默认 x64，可另构建 ARM64 |
 
 认证页无法访问时，可先完成校园认证再启用 VPN。本软件不会修改系统 VPN、DNS 或路由。它不保证自动适配所有学校的认证系统。

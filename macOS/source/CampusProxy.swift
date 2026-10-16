@@ -2,7 +2,7 @@ import Foundation
 import Network
 
 // A loopback-only bridge for this app's approved campus host. Outbound sockets
-// require the physical Wi-Fi interface, so captive authentication can finish
+// require the selected Wi-Fi or wired Ethernet interface, so captive authentication can finish
 // even when a packet-tunnel VPN captures the default route. No TLS interception.
 final class CampusProxy {
     private let queue = DispatchQueue(label: "local.campusconnect.portal-bridge")
@@ -10,7 +10,7 @@ final class CampusProxy {
     private var pipes: [UUID: CampusPipe] = [:]
     private var generation = 0
 
-    func start(host: String, additionalHosts: Set<String> = [], completion: @escaping (Result<UInt16, Error>) -> Void) {
+    func start(host: String, additionalHosts: Set<String> = [], interfaceType: NWInterface.InterfaceType = .wifi, completion: @escaping (Result<UInt16, Error>) -> Void) {
         queue.async { [self] in
             self.stopOnQueue()
             let expected = self.generation
@@ -34,7 +34,7 @@ final class CampusProxy {
                     guard let self, expected == self.generation else { connection.cancel(); return }
                     let id = UUID()
                     let hosts = Set(additionalHosts.map { $0.lowercased() }).union([host.lowercased()])
-                    let pipe = CampusPipe(client: connection, allowedHosts: hosts, queue: self.queue) { [weak self] in self?.pipes.removeValue(forKey: id) }
+                    let pipe = CampusPipe(client: connection, allowedHosts: hosts, interfaceType: interfaceType, queue: self.queue) { [weak self] in self?.pipes.removeValue(forKey: id) }
                     self.pipes[id] = pipe
                     pipe.start()
                 }
@@ -60,13 +60,14 @@ final class CampusProxy {
 private final class CampusPipe {
     let client: NWConnection
     let allowedHosts: Set<String>
+    let interfaceType: NWInterface.InterfaceType
     let queue: DispatchQueue
     let onClose: () -> Void
     var upstream: NWConnection?
     var header = Data()
     var closed = false
-    init(client: NWConnection, allowedHosts: Set<String>, queue: DispatchQueue, onClose: @escaping () -> Void) {
-        self.client = client; self.allowedHosts = allowedHosts; self.queue = queue; self.onClose = onClose
+    init(client: NWConnection, allowedHosts: Set<String>, interfaceType: NWInterface.InterfaceType, queue: DispatchQueue, onClose: @escaping () -> Void) {
+        self.client = client; self.allowedHosts = allowedHosts; self.interfaceType = interfaceType; self.queue = queue; self.onClose = onClose
     }
     func start() {
         client.stateUpdateHandler = { [weak self] state in
@@ -107,7 +108,7 @@ private final class CampusPipe {
         let port = target.port ?? (target.scheme == "https" ? 443 : 80)
         guard port > 0, port <= 65535 else { reject(); return }
         let parameters = NWParameters.tcp
-        parameters.requiredInterfaceType = .wifi
+        parameters.requiredInterfaceType = interfaceType
         parameters.preferNoProxies = true
         let connection = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: UInt16(port))!, using: parameters)
         upstream = connection

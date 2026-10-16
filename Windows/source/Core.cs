@@ -6,6 +6,10 @@ namespace CampusConnect;
 public sealed record CampusProfile
 {
     public string Ssid { get; init; } = "HNPI-STU";
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsWired => string.IsNullOrWhiteSpace(Ssid);
+    public bool MatchesNetwork(string? currentSsid, bool wiredAvailable)
+        => IsWired ? wiredAvailable : currentSsid == Ssid;
     public bool UseSavedWifiProfile { get; init; }
     public bool PortalEnabled { get; init; } = true;
     public string PortalUrl { get; init; } = "http://192.168.0.123";
@@ -27,8 +31,8 @@ public sealed record CampusProfile
 
     public void Validate()
     {
-        if (string.IsNullOrWhiteSpace(Ssid) || Encoding.UTF8.GetByteCount(Ssid) > 32)
-            throw new InvalidOperationException("Wi-Fi 名称必须为 1–32 字节。");
+        if (!IsWired && Encoding.UTF8.GetByteCount(Ssid) > 32)
+            throw new InvalidOperationException("Wi-Fi 名称最多为 32 字节；有线模式请留空。");
         if (PortalEnabled && Origin(PortalUrl) is null)
             throw new InvalidOperationException("请输入 http:// 或 https:// 开头的认证地址，不能在地址中包含账号密码。");
     }

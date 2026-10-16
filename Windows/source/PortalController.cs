@@ -88,9 +88,9 @@ internal sealed class PortalController
         try { await initialization; }
         catch { initialization = null; throw; }
         if (expected != generation) return;
-        var current = await WifiService.ReadCurrentAsync(saved.Ssid);
+        var connected = await CampusNetwork.IsAvailableAsync(saved);
         if (expected != generation || View.IsDisposed) return;
-        if (current != saved.Ssid) throw new InvalidOperationException("请先连接已设置的校园 Wi-Fi，再打开认证页。");
+        if (!connected) throw new InvalidOperationException(saved.IsWired ? "请先插好网线并启用有线网络，再打开认证页。" : "请先连接已设置的校园 Wi-Fi，再打开认证页。");
         saved.Validate();
         profile = discover ? saved with { PortalUrl = "http://www.msftconnecttest.com/redirect", Username = "", AutoSubmit = false } : saved;
         password = discover ? "" : secret; RequiresInteraction = !saved.AutoSubmit;
@@ -151,9 +151,9 @@ internal sealed class PortalController
         if (profile is not { } active) return true;
         try {
             if (CampusProfile.Origin(View.CoreWebView2.Source) != CampusProfile.Origin(active.PortalUrl)) return false;
-            var ssid = await WifiService.ReadCurrentAsync(active.Ssid);
+            var connected = await CampusNetwork.IsAvailableAsync(active);
             if (expected != generation || View.IsDisposed) return true;
-            if (ssid != active.Ssid) { Stop(); return true; }
+            if (!connected) { Stop(); return true; }
             var result = JsonSerializer.Deserialize<string>(await View.CoreWebView2.ExecuteScriptAsync(PortalScript.Build(active, "", statusOnly: true)));
             if (expected != generation) return true;
             if (result == "authenticated") { ConfirmAuthentication(); return true; }
@@ -175,9 +175,9 @@ internal sealed class PortalController
         observingGeneration = expected;
         try {
             while (expected == generation && profile is { } active && authenticationDeadline is { } deadline) {
-                var ssid = await WifiService.ReadCurrentAsync(active.Ssid);
+                var connected = await CampusNetwork.IsAvailableAsync(active);
                 if (expected != generation || View.IsDisposed) return;
-                if (ssid != active.Ssid) { Stop(); Status?.Invoke("校园网已断开，停止登录校验。"); return; }
+                if (!connected) { Stop(); Status?.Invoke("校园网已断开，停止登录校验。"); return; }
                 string? result = null;
                 if (CampusProfile.Origin(View.CoreWebView2.Source) == CampusProfile.Origin(active.PortalUrl))
                     result = JsonSerializer.Deserialize<string>(await View.CoreWebView2.ExecuteScriptAsync(PortalScript.Build(active, "", statusOnly: true)));
@@ -215,9 +215,9 @@ internal sealed class PortalController
         for (var attempt = 0; attempt <= 80; attempt++) {
             if (expected != generation || finished || profile is null) return;
             var activeProfile = profile;
-            var current = await WifiService.ReadCurrentAsync(activeProfile.Ssid);
+            var connected = await CampusNetwork.IsAvailableAsync(activeProfile);
             if (expected != generation || finished || View.IsDisposed) return;
-            if (current != activeProfile.Ssid) { Stop(); Status?.Invoke("校园网已断开，停止自动填写。"); return; }
+            if (!connected) { Stop(); Status?.Invoke("校园网已断开，停止自动填写。"); return; }
             if (CampusProfile.Origin(View.CoreWebView2.Source) != CampusProfile.Origin(profile.PortalUrl)) {
                 Status?.Invoke("当前页面与保存的认证地址不同，请核实后更新设置。"); return;
             }

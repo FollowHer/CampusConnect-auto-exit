@@ -27,3 +27,28 @@ internal static class Connectivity
         }
     }
 }
+
+// Wired mode never calls WLAN APIs, so PCs without a wireless adapter can authenticate.
+internal static class CampusNetwork
+{
+    internal static bool IsWiredInterface(NetworkInterfaceType type, OperationalStatus status)
+        => status == OperationalStatus.Up && type is NetworkInterfaceType.Ethernet
+            or NetworkInterfaceType.GigabitEthernet or NetworkInterfaceType.FastEthernetFx
+            or NetworkInterfaceType.FastEthernetT;
+
+    public static Guid? ReadWiredInterface()
+    {
+        try {
+            return NetworkInterface.GetAllNetworkInterfaces()
+                .Where(n => IsWiredInterface(n.NetworkInterfaceType, n.OperationalStatus)
+                    && n.GetIPProperties().UnicastAddresses.Any(a => !System.Net.IPAddress.IsLoopback(a.Address)))
+                .Select(n => Guid.TryParse(n.Id, out var id) ? (Guid?)id : null)
+                .FirstOrDefault(id => id is not null);
+        } catch (NetworkInformationException) { return null; }
+    }
+    public static async Task<bool> IsAvailableAsync(CampusProfile profile)
+        => profile.IsWired ? ReadWiredInterface() is not null
+            : profile.MatchesNetwork(await WifiService.ReadCurrentAsync(profile.Ssid), false);
+    public static Task<Guid?> ReadInterfaceAsync(CampusProfile profile)
+        => profile.IsWired ? Task.FromResult(ReadWiredInterface()) : WifiService.ReadInterfaceAsync(profile.Ssid);
+}

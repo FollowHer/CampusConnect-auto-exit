@@ -41,10 +41,10 @@ final class PortalController: NSObject, ObservableObject, WKNavigationDelegate {
         let expected = generation
         preparing = true
         webView.stopLoading()
-        fillWiFi.readCurrent { [weak self] ssid in
+        fillWiFi.readConnection(profile: profile) { [weak self] connected in
             guard let self, expected == self.generation else { return }
-            guard ssid == profile.ssid else {
-                self.preparing = false; self.message = "请先连接 \(profile.ssid)，再打开认证页。"; return
+            guard connected else {
+                self.preparing = false; self.message = profile.isWired ? "请先插好网线并启用有线网络，再打开认证页。" : "请先连接 \(profile.ssid)，再打开认证页。"; return
             }
             self.load(profile: profile, password: password, discoveryHost: discoveryHost)
         }
@@ -67,7 +67,7 @@ final class PortalController: NSObject, ObservableObject, WKNavigationDelegate {
         let expected = generation
         guard let host = url.host else { message = "认证地址无效。"; return }
         let extra = discoveryHost.map { Set([$0]) } ?? []
-        campusProxy.start(host: host, additionalHosts: extra) { [weak self] result in
+        campusProxy.start(host: host, additionalHosts: extra, interfaceType: profile.isWired ? .wiredEthernet : .wifi) { [weak self] result in
             guard let self, expected == self.generation else { return }
             switch result {
             case .success(let port):
@@ -117,8 +117,8 @@ final class PortalController: NSObject, ObservableObject, WKNavigationDelegate {
            current.path == "/eportal/success.jsp",
            URLComponents(url: current, resolvingAgainstBaseURL: false)?.queryItems?.contains(where: { $0.name == "userIndex" && !($0.value ?? "").isEmpty }) == true {
             let expected = generation
-            fillWiFi.readCurrent { [weak self] ssid in
-                guard let self, expected == self.generation, ssid == profile.ssid else { return }
+            fillWiFi.readConnection(profile: profile) { [weak self] connected in
+                guard let self, expected == self.generation, connected else { return }
                 self.confirmAuthentication()
             }
             return
@@ -146,9 +146,9 @@ final class PortalController: NSObject, ObservableObject, WKNavigationDelegate {
     }
     private func pollAuthentication(expected: Int) {
         guard expected == generation, let profile, let deadline = authenticationDeadline else { return }
-        fillWiFi.readCurrent { [weak self] ssid in
+        fillWiFi.readConnection(profile: profile) { [weak self] connected in
             guard let self, expected == self.generation else { return }
-            guard ssid == profile.ssid else { self.stop(); self.message = "校园网已断开，停止登录校验。"; return }
+            guard connected else { self.stop(); self.message = "校园网已断开，停止登录校验。"; return }
             let next: (String?) -> Void = { [weak self] status in
                 guard let self, expected == self.generation, self.authenticationDeadline != nil else { return }
                 if status == "authenticated" { self.confirmAuthentication(); return }
@@ -172,9 +172,9 @@ final class PortalController: NSObject, ObservableObject, WKNavigationDelegate {
 
     private func attemptFill(generation expected: Int, attempt: Int) {
         guard expected == generation, !submitted, !filled, let profile else { return }
-        fillWiFi.readCurrent { [weak self] currentSSID in
+        fillWiFi.readConnection(profile: profile) { [weak self] connected in
             guard let self, expected == self.generation, !self.submitted, !self.filled else { return }
-            guard currentSSID == profile.ssid else { self.message = "校园网已断开，暂停填写。"; return }
+            guard connected else { self.message = "校园网已断开，暂停填写。"; return }
             self.evaluateFill(profile: profile, expected: expected, attempt: attempt)
         }
     }

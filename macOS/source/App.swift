@@ -23,6 +23,7 @@ enum Page: String, CaseIterable {
     @Published var portalPassword = ""
     @Published var page = Page.dashboard
     @Published var currentSSID: String?
+    @Published var wiredConnected = false
     @Published var networks: [VisibleNetwork] = []
     @Published var scanning = false
     @Published var joining = false
@@ -54,6 +55,10 @@ enum Page: String, CaseIterable {
         super.init()
         if preview { return }
         refreshStartup()
+        WiredNetwork.shared.onChange = { [weak self] in
+            guard let self, self.saved.isWired else { return }
+            self.refresh(scan: false)
+        }
         location.delegate = self
         authorized = isAuthorized
         updatePermission()
@@ -75,18 +80,23 @@ enum Page: String, CaseIterable {
         NotificationCenter.default.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor [weak self] in self?.connectionGeneration += 1; self?.policy.reset(); self?.recovery.reset(); self?.stopAuthentication(); self?.internet = nil; self?.refresh(scan: false) }
         }
-        record("已载入 \(loaded.ssid) 配置。")
+        record("已载入 \(loaded.isWired ? "有线网络" : loaded.ssid) 配置。")
         DispatchQueue.main.async { [weak self] in self?.refresh(scan: false) }
     }
 
     var isAuthorized: Bool {
         location.authorizationStatus == .authorizedAlways
     }
-    var campusConnected: Bool { currentSSID == saved.ssid }
-    var target: String { saved.ssid }
+    var wiredMode: Bool { saved.isWired }
+    var campusConnected: Bool { saved.matchesNetwork(currentSSID: currentSSID, wiredAvailable: wiredConnected) }
+    var target: String { saved.isWired ? "有线网络" : saved.ssid }
     var changed: Bool { draft != saved }
     var connectionTitle: String {
         if joining { return "正在连接校园网" }
+        if saved.isWired {
+            guard wiredConnected else { return "有线网络未连接，请插好网线" }
+            return internet == true ? "有线校园网已连接 · 可上网" : internet == false ? "有线网络已连接 · 未联网" : "有线网络已连接 · 正在确认上网状态"
+        }
         if !authorized { return "等待 Wi-Fi 访问授权" }
         if !powered { return "Wi-Fi 已关闭" }
         if campusConnected { return internet == true ? "校园网已连接 · 可上网" : internet == false ? "Wi-Fi 已连接 · 未联网" : "Wi-Fi 已连接 · 正在确认上网状态" }
@@ -111,18 +121,25 @@ enum Page: String, CaseIterable {
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         Task { @MainActor in
             self.updatePermission()
-            if self.authorized { self.refresh(scan: false) }
+            if self.saved.isWired || self.authorized { self.refresh(scan: false) }
             else { self.currentSSID = nil; self.networks = []; self.stopAuthentication() }
         }
     }
 
     func refresh(scan: Bool = true) {
         guard !scanning, !joining else { return }
+        if saved.isWired {
+            refreshWiredConnection()
+            if wiredConnected { verifyInternet(openIfOffline: automatic) }
+            return
+        }
         guard authorized else { status = permissionText; return }
         scanning = true
+        let expected = connectionGeneration
         wifi.scan(preferred: scan ? nil : saved.ssid) { [weak self] result in
             guard let self else { return }
             self.scanning = false
+            guard expected == self.connectionGeneration else { self.refresh(scan: false); return }
             switch result {
             case .failure(let error): self.record("扫描失败：\(error.localizedDescription)")
             case .success(let snapshot):
@@ -160,10 +177,11 @@ enum Page: String, CaseIterable {
             profile.serviceOption = profile.serviceOption.trimmingCharacters(in: .whitespacesAndNewlines)
             profile.automatic = enable
             try profile.validate()
-            if profile.joinMode != .open && wifiPassword.isEmpty { throw AppError.message("请填写 Wi-Fi 密码。") }
+            if !profile.isWired && profile.joinMode != .open && wifiPassword.isEmpty { throw AppError.message("请填写 Wi-Fi 密码。") }
             if profile.portalEnabled && (profile.username.isEmpty || portalPassword.isEmpty) { throw AppError.message("请填写上网认证账号和密码。") }
             try LocalStore.save(profile: profile, secrets: Secrets(wifi: wifiPassword, portal: portalPassword))
             saved = profile; draft = profile; automatic = enable
+            currentSSID = nil; wiredConnected = false; networks = []
             policy.reset(); recovery.reset(); connectionGeneration += 1; internet = nil; authenticated = false
             stopAuthentication()
             record(enable ? "设置已保存，自动连接已开启。" : "设置已保存。")
@@ -183,8 +201,23 @@ enum Page: String, CaseIterable {
         }
     }
 
+    private func refreshWiredConnection() {
+        let connected = WiredNetwork.shared.available
+        currentSSID = nil; networks = []; lastScan = Date()
+        if wiredConnected != connected {
+            wiredConnected = connected; connectionGeneration += 1; recovery.reset()
+            internet = nil; authenticated = false; stopAuthentication()
+        }
+        if !connected { record("有线网络未连接，请插好网线并在系统中启用以太网。") }
+    }
     func connect(manual: Bool = false) {
-        guard !joining, !scanning, authorized else { return }
+        guard !joining, !scanning else { return }
+        if saved.isWired {
+            refreshWiredConnection()
+            if wiredConnected { verifyInternet(openIfOffline: automatic, manual: manual) }
+            return
+        }
+        guard authorized else { return }
         if manual { policy.reset() }
         if campusConnected { openPortal(); return }
         do {
@@ -222,10 +255,10 @@ enum Page: String, CaseIterable {
         }
         Connectivity.check { [weak self] result in
             guard let self else { return }
-            self.wifi.readCurrent { [weak self] current in
+            self.wifi.readConnection(profile: self.saved) { [weak self] connected in
                 guard let self else { return }
                 self.checkingInternet = false
-                guard expected == self.connectionGeneration, self.saved.ssid == expectedSSID, current == expectedSSID else { return }
+                guard expected == self.connectionGeneration, self.saved.ssid == expectedSSID, connected else { return }
                 self.internet = result == .online
                 self.recovery.observe(result)
                 if result == .online { self.portal.confirmInternetAccess(); self.status = "" }
@@ -246,7 +279,7 @@ enum Page: String, CaseIterable {
         portal.stop()
     }
     func openPortal(discover: Bool = false, showPage: Bool = true) {
-        guard campusConnected else { record("请先连接 \(saved.ssid)。"); return }
+        guard campusConnected else { record(saved.isWired ? "请先插好网线并启用有线网络。" : "请先连接 \(saved.ssid)。"); return }
         do {
             var profile = saved
             if discover { profile.portalURL = "" }
@@ -385,7 +418,7 @@ struct RootView: View {
                         Text(model.status).font(.system(size: 11)).lineLimit(2)
                     }
                     Spacer()
-                    Text("v1.5.0 · macOS").font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text("v1.5.2 · macOS").font(.system(size: 10)).foregroundStyle(.secondary)
                 }.padding(.horizontal, 24).padding(.vertical, 12)
             }.background(Color(nsColor: .textBackgroundColor))
         }.frame(minWidth: 980, minHeight: 700).tint(accent).textSelection(.disabled)
@@ -408,14 +441,14 @@ struct RootView: View {
             VStack(alignment: .leading, spacing: 20) {
                 card {
                     HStack(alignment: .top, spacing: 18) {
-                        Image(systemName: model.campusConnected ? "wifi.circle.fill" : "wifi.circle")
+                        Image(systemName: model.wiredMode ? "network" : model.campusConnected ? "wifi.circle.fill" : "wifi.circle")
                             .font(.system(size: 54)).foregroundStyle(accent)
                         VStack(alignment: .leading, spacing: 10) {
                             Text(model.connectionTitle).font(.system(size: 22, weight: .semibold))
                             Text("目标校园网  \(model.target)").font(.system(size: 13)).foregroundStyle(.secondary)
                             HStack(spacing: 10) {
                                 Button("立即连接") { model.connect(manual: true) }.buttonStyle(.borderedProminent)
-                                    .disabled(!model.authorized || model.scanning || model.joining)
+                                    .disabled((!model.wiredMode && !model.authorized) || model.scanning || model.joining)
                                 Button("修改配置") { model.selectPage(.settings) }
                             }.padding(.top, 4)
                         }
@@ -426,14 +459,14 @@ struct RootView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("自动连接与认证").font(.system(size: 15, weight: .semibold))
-                            Text("发现 \(model.target) 后连接，并使用已保存账号登录。")
+                            Text(model.wiredMode ? "接入有线网络后，使用已保存账号进行上网认证。" : "发现 \(model.target) 后连接，并使用已保存账号登录。")
                                 .font(.system(size: 12)).foregroundStyle(.secondary)
                         }
                         Spacer()
                         Toggle("自动连接", isOn: Binding(get: { model.automatic }, set: { model.setAutomatic($0) })).labelsHidden().toggleStyle(.switch)
                     }
                 }
-                if !model.authorized {
+                if !model.wiredMode && !model.authorized {
                     card {
                         HStack {
                             Image(systemName: "location.circle").font(.system(size: 25)).foregroundStyle(accent)
@@ -448,14 +481,14 @@ struct RootView: View {
                 }
                 VStack(alignment: .leading, spacing: 14) {
                     HStack {
-                        Text("附近网络").font(.system(size: 16, weight: .semibold))
+                        Text(model.wiredMode ? "有线模式" : "附近网络").font(.system(size: 16, weight: .semibold))
                         Spacer()
                         if let date = model.lastScan { Text("更新于 \(date.formatted(date: .omitted, time: .shortened))").font(.system(size: 11)).foregroundStyle(.secondary) }
                     }
                     if model.networks.isEmpty {
                         VStack(spacing: 10) {
                             Image(systemName: "antenna.radiowaves.left.and.right").font(.system(size: 28)).foregroundStyle(.secondary)
-                            Text(model.authorized ? "点击刷新扫描附近网络" : "授权定位后显示真实网络列表").font(.system(size: 13)).foregroundStyle(.secondary)
+                            Text(model.wiredMode ? "无需填写 Wi-Fi 名称；接好网线后即可进行网页认证。" : model.authorized ? "点击刷新扫描附近网络" : "授权定位后显示真实网络列表").font(.system(size: 13)).foregroundStyle(.secondary)
                         }.frame(maxWidth: .infinity).padding(.vertical, 28)
                     } else {
                         ForEach(model.networks) { network in
@@ -504,19 +537,21 @@ struct RootView: View {
                 }
                 card {
                     VStack(alignment: .leading, spacing: 16) {
-                        Label("校园 Wi-Fi", systemImage: "wifi").font(.system(size: 16, weight: .semibold))
-                        field("网络名称（SSID，精确匹配）", text: $model.draft.ssid)
-                        Picker("连接方式", selection: $model.draft.joinMode) {
-                            ForEach(JoinMode.allCases) { Text($0.title).tag($0) }
-                        }.pickerStyle(.segmented)
-                        if model.draft.joinMode == .enterprise { field("Wi-Fi 企业认证用户名", text: $model.draft.wifiUsername) }
-                        if model.draft.joinMode != .open {
-                            VStack(alignment: .leading, spacing: 7) {
-                                Text("Wi-Fi 连接密码").font(.system(size: 12, weight: .medium))
-                                SecureField("输入连接密码", text: $model.wifiPassword).textFieldStyle(.roundedBorder)
+                        Label("校园网络", systemImage: "network").font(.system(size: 16, weight: .semibold))
+                        field("Wi-Fi 名称（有线模式留空）", text: $model.draft.ssid, prompt: "留空使用有线网络")
+                        if !model.draft.isWired {
+                            Picker("连接方式", selection: $model.draft.joinMode) {
+                                ForEach(JoinMode.allCases) { Text($0.title).tag($0) }
+                            }.pickerStyle(.segmented)
+                            if model.draft.joinMode == .enterprise { field("Wi-Fi 企业认证用户名", text: $model.draft.wifiUsername) }
+                            if model.draft.joinMode != .open {
+                                VStack(alignment: .leading, spacing: 7) {
+                                    Text("Wi-Fi 连接密码").font(.system(size: 12, weight: .medium))
+                                    SecureField("输入连接密码", text: $model.wifiPassword).textFieldStyle(.roundedBorder)
+                                }
                             }
                         }
-                        Text("HNPI-STU 默认按开放网络处理；学号和密码在下方网页认证中填写。")
+                        Text(model.draft.isWired ? "有线模式：无需 Wi-Fi 和定位权限。接好网线后，填写下方认证地址与上网账号密码。" : "Wi-Fi 名称精确匹配；有线网络请清空名称。学号和密码在下方网页认证中填写。")
                             .font(.system(size: 11)).foregroundStyle(.secondary)
                     }
                 }

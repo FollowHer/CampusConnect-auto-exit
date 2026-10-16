@@ -30,7 +30,29 @@ foreach (var oldMethod in new[] { "direct", "browser" }) {
     Expect(PortalScript.Build(legacy, "dummy-secret").Contains("dummy-secret"), "upgraded configuration builds browser authentication script");
 }
 
-Invalid(profile with { Ssid = "" });
+var wired = profile with { Ssid = "" };
+wired.Validate();
+Expect(wired.IsWired, "blank SSID selects wired mode");
+Expect((profile with { Ssid = "  " }).IsWired, "whitespace selects wired mode");
+Expect(!profile.IsWired, "legacy configured SSID remains Wi-Fi mode");
+Expect(wired.MatchesNetwork(null, true), "wired authentication works without a Wi-Fi adapter");
+Expect(!wired.MatchesNetwork("HNPI-STU", false), "Wi-Fi cannot stand in for unplugged Ethernet");
+Expect(!profile.MatchesNetwork("Other", true), "Ethernet cannot bypass configured Wi-Fi SSID");
+Expect(profile.MatchesNetwork("HNPI-STU", false), "configured Wi-Fi works without Ethernet");
+var reloadedWired = JsonSerializer.Deserialize<CampusProfile>(JsonSerializer.Serialize(wired))!;
+Expect(reloadedWired.IsWired && reloadedWired.Ssid == "", "wired mode survives config reload");
+Invalid(wired with { PortalUrl = "javascript:alert(1)" });
+Invalid(wired with { PortalUrl = "http://user:secret@example.com" });
+foreach (var type in new[] { System.Net.NetworkInformation.NetworkInterfaceType.Ethernet,
+    System.Net.NetworkInformation.NetworkInterfaceType.GigabitEthernet }) {
+    Expect(CampusNetwork.IsWiredInterface(type, System.Net.NetworkInformation.OperationalStatus.Up), "Ethernet link recognized");
+    Expect(!CampusNetwork.IsWiredInterface(type, System.Net.NetworkInformation.OperationalStatus.Down), "unplugged Ethernet rejected");
+}
+foreach (var type in new[] { System.Net.NetworkInformation.NetworkInterfaceType.Wireless80211,
+    System.Net.NetworkInformation.NetworkInterfaceType.Loopback, System.Net.NetworkInformation.NetworkInterfaceType.Tunnel })
+    Expect(!CampusNetwork.IsWiredInterface(type, System.Net.NetworkInformation.OperationalStatus.Up), "non-Ethernet rejected");
+// This call must work even on macOS, where Windows WLAN APIs cannot load.
+_ = await CampusNetwork.IsAvailableAsync(wired);
 Invalid(profile with { Ssid = new string('网', 11) });
 Invalid(profile with { PortalUrl = "javascript:alert(1)" });
 Invalid(profile with { PortalUrl = "https://user:secret@example.com" });
@@ -38,6 +60,7 @@ Expect(CampusProfile.Origin("http://EXAMPLE.com:80/a") == "http://example.com", 
 Expect(CampusProfile.Origin("https://example.com:8443/a") == "https://example.com:8443", "port retained");
 Expect(CampusProfile.Origin("http://[::1]/") == "http://[::1]", "IPv6 origin");
 var policy = new AutoPolicy(); var now = DateTimeOffset.UtcNow;
+Expect(!policy.ShouldJoin(true, "", null, [""], false, now), "wired mode never joins a Wi-Fi network");
 Expect(policy.ShouldJoin(true, "HNPI-STU", "Home", ["HNPI-STU"], false, now), "visible target");
 Expect(!policy.ShouldJoin(true, "HNPI-STU", null, ["HNPI-STU-fake"], false, now), "exact SSID");
 Expect(!policy.ShouldJoin(false, "HNPI-STU", null, ["HNPI-STU"], false, now), "pause");

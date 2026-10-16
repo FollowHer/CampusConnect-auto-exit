@@ -1,5 +1,24 @@
 import Foundation
 import CoreWLAN
+import Network
+
+// The path reports a usable Ethernet link, independently of internet reachability.
+// All access and notifications occur on the main queue.
+final class WiredNetwork {
+    static let shared = WiredNetwork()
+    private let monitor = NWPathMonitor(requiredInterfaceType: .wiredEthernet)
+    private(set) var available = false
+    var onChange: (() -> Void)?
+    private init() {
+        monitor.pathUpdateHandler = { [weak self] path in
+            guard let self else { return }
+            self.available = path.status == .satisfied
+            self.onChange?()
+        }
+        monitor.start(queue: .main)
+    }
+}
+
 
 struct VisibleNetwork: Identifiable {
     let ssid: String
@@ -18,6 +37,10 @@ struct WiFiSnapshot {
 
 final class WiFiService {
     private let queue = DispatchQueue(label: "local.campusconnect.wifi", qos: .utility)
+    func readConnection(profile: CampusProfile, completion: @escaping (Bool) -> Void) {
+        if profile.isWired { completion(WiredNetwork.shared.available); return }
+        readCurrent { completion(profile.matchesNetwork(currentSSID: $0, wiredAvailable: false)) }
+    }
     func readCurrent(completion: @escaping (String?) -> Void) {
         queue.async {
             let ssid = Self.currentSSID

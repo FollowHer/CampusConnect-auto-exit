@@ -70,8 +70,27 @@ import JavaScriptCore
         expect(!PortalFillRetry.shouldRetry(result: "manual-required", scriptFailed: false, attempt: 0), "manual challenge is not retried")
         expect(!PortalFillRetry.shouldRetry(result: nil, scriptFailed: true, attempt: 200), "script retries are bounded")
 
+        var wired = CampusProfile()
+        wired.ssid = ""; wired.joinMode = .enterprise
+        try wired.validate() // Stale Wi-Fi enterprise fields are irrelevant in wired mode.
+        expect(wired.isWired, "empty SSID selects wired mode")
+        expect(!CampusProfile().isWired, "existing SSID remains Wi-Fi mode")
+        expect(wired.matchesNetwork(currentSSID: nil, wiredAvailable: true), "wired authentication without Wi-Fi")
+        expect(!wired.matchesNetwork(currentSSID: "HNPI-STU", wiredAvailable: false), "Wi-Fi cannot stand in for disconnected Ethernet")
+        expect(!CampusProfile().matchesNetwork(currentSSID: "Other", wiredAvailable: true), "Ethernet cannot bypass SSID guard")
+        expect(CampusProfile().matchesNetwork(currentSSID: "HNPI-STU", wiredAvailable: false), "original Wi-Fi authentication allowed")
+        try LocalStore.save(profile: wired, secrets: secrets, directory: localDirectory)
+        let wiredReloaded = try LocalStore.load(directory: localDirectory)
+        expect(wiredReloaded.profile.isWired && wiredReloaded.profile.ssid.isEmpty, "wired config reload")
+        expect(wiredReloaded.credentials[""] == secrets, "wired credentials persist under empty SSID")
+        expect(wiredReloaded.credentials[storedProfile.ssid] == secrets, "mode change preserves Wi-Fi credentials")
+        wired.ssid = "  "
+        expect(wired.isWired, "whitespace selects wired mode")
+        wired.portalURL = "javascript:alert(1)"
+        do { try wired.validate(); expect(false, "invalid wired portal accepted") } catch { checks += 1 }
         var policy = AutoPolicy()
         let now = Date()
+        expect(!policy.shouldJoin(enabled: true, target: "", current: nil, visible: [""], busy: false, now: now), "wired mode never joins Wi-Fi")
         expect(policy.shouldJoin(enabled: true, target: "HNPI-STU", current: "Home", visible: ["HNPI-STU"], busy: false, now: now), "connect visible exact target")
         expect(!policy.shouldJoin(enabled: true, target: "HNPI-STU", current: nil, visible: ["HNPI-STU-fake"], busy: false, now: now), "no substring match")
         expect(!policy.shouldJoin(enabled: false, target: "HNPI-STU", current: nil, visible: ["HNPI-STU"], busy: false, now: now), "pause toggle")

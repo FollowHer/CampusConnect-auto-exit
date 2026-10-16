@@ -10,6 +10,10 @@ enum JoinMode: String, Codable, CaseIterable, Identifiable {
 
 struct CampusProfile: Codable, Equatable {
     var ssid = "HNPI-STU"
+    var isWired: Bool { ssid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    func matchesNetwork(currentSSID: String?, wiredAvailable: Bool) -> Bool {
+        isWired ? wiredAvailable : currentSSID == ssid
+    }
     var joinMode: JoinMode = .open
     var wifiUsername = ""
     var portalEnabled = true
@@ -50,8 +54,8 @@ struct CampusProfile: Codable, Equatable {
         return url
     }
     func validate() throws {
-        guard !ssid.isEmpty, ssid.utf8.count <= 32 else { throw AppError.message("请输入正确的 Wi-Fi 名称（最多 32 字节）。") }
-        if joinMode == .enterprise && wifiUsername.isEmpty { throw AppError.message("企业认证需要 Wi-Fi 用户名。") }
+        guard isWired || ssid.utf8.count <= 32 else { throw AppError.message("Wi-Fi 名称最多为 32 字节；有线模式请留空。") }
+        if !isWired && joinMode == .enterprise && wifiUsername.isEmpty { throw AppError.message("企业认证需要 Wi-Fi 用户名。") }
         if portalEnabled && !portalURL.isEmpty && validPortalURL == nil { throw AppError.message("认证地址需要以 http:// 或 https:// 开头。") }
     }
 }
