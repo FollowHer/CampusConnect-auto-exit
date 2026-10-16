@@ -10,8 +10,10 @@ const macScript = core.slice(core.indexOf('        (() => {'), core.indexOf('   
   .split('\n').map(line => line.startsWith('        ') ? line.slice(8) : line).join('\n')
   .replace('\\(json)', '/*CAMPUS_CONFIG*/').replaceAll('\\\\', '\\');
 // Both platforms share credential and service selection behavior.
-// The common credential flow stays unchanged; the new Windows-only checkbox hook is tested separately.
-assert.equal(macScript, template.replace('  /*CAMPUS_AGREEMENTS*/\n', ''));
+// Credential flow and the agreement hook are shared by both platforms.
+assert.equal(macScript, template);
+const macAgreements = core.split('static let agreementScript = #"""\n')[1].split('    """#')[0].split('\n').map(line => line.startsWith('    ') ? line.slice(4) : line).join('\n');
+assert.equal(macAgreements.trimEnd(), fs.readFileSync(path.join(__dirname, '../source/PortalAgreements.js'), 'utf8').replace(/\r\n/g, '\n').trimEnd());
 const cfg = {origin:'http://portal.test', username:'test-account\'"', password:'test-password\'"',
   userSelector:'', passwordSelector:'', submitSelector:'', submit:true};
 const script = overrides => template.replace('/*CAMPUS_CONFIG*/', JSON.stringify({...cfg, ...overrides}));

@@ -8,9 +8,29 @@ enum JoinMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum WiredAuth: String, Codable, CaseIterable, Identifiable {
+    case web, pppoe, dot1x, client
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .web: return "网页认证"
+        case .pppoe: return "PPPoE 宽带拨号"
+        case .dot1x: return "802.1X 系统认证"
+        case .client: return "学校专用客户端"
+        }
+    }
+}
+
 struct CampusProfile: Codable, Equatable {
     var ssid = "HNPI-STU"
+    var wiredAuth: WiredAuth = .web
+    var ethernetName = ""
+    var broadbandName = ""
+    var authenticationClient = ""
     var isWired: Bool { ssid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var usesSystemAuthentication: Bool { isWired && wiredAuth != .web }
+    var usesWebPortal: Bool { portalEnabled && !usesSystemAuthentication }
+    var connectionLabel: String { isWired ? "有线 · \(wiredAuth.title)" : "Wi-Fi" }
     func matchesNetwork(currentSSID: String?, wiredAvailable: Bool) -> Bool {
         isWired ? wiredAvailable : currentSSID == ssid
     }
@@ -29,11 +49,16 @@ struct CampusProfile: Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case ssid, joinMode, wifiUsername, portalEnabled, portalURL, username
         case serviceOption, userSelector, passwordSelector, submitSelector, autoSubmit, automatic
+        case wiredAuth, ethernetName, broadbandName, authenticationClient
     }
     init() {}
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         ssid = try values.decodeIfPresent(String.self, forKey: .ssid) ?? "HNPI-STU"
+        wiredAuth = try values.decodeIfPresent(WiredAuth.self, forKey: .wiredAuth) ?? .web
+        ethernetName = try values.decodeIfPresent(String.self, forKey: .ethernetName) ?? ""
+        broadbandName = try values.decodeIfPresent(String.self, forKey: .broadbandName) ?? ""
+        authenticationClient = try values.decodeIfPresent(String.self, forKey: .authenticationClient) ?? ""
         joinMode = try values.decodeIfPresent(JoinMode.self, forKey: .joinMode) ?? .open
         wifiUsername = try values.decodeIfPresent(String.self, forKey: .wifiUsername) ?? ""
         portalEnabled = try values.decodeIfPresent(Bool.self, forKey: .portalEnabled) ?? true
@@ -56,7 +81,14 @@ struct CampusProfile: Codable, Equatable {
     func validate() throws {
         guard isWired || ssid.utf8.count <= 32 else { throw AppError.message("Wi-Fi 名称最多为 32 字节；有线模式请留空。") }
         if !isWired && joinMode == .enterprise && wifiUsername.isEmpty { throw AppError.message("企业认证需要 Wi-Fi 用户名。") }
-        if portalEnabled && !portalURL.isEmpty && validPortalURL == nil { throw AppError.message("认证地址需要以 http:// 或 https:// 开头。") }
+        if ethernetName.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) { throw AppError.message("以太网接口名称无效。") }
+        if isWired && wiredAuth == .pppoe && (broadbandName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || broadbandName.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)) {
+            throw AppError.message("请填写 macOS 中已配置的 PPPoE 服务名称。")
+        }
+        if isWired && wiredAuth == .client && (!authenticationClient.hasPrefix("/") || !authenticationClient.hasSuffix(".app")) {
+            throw AppError.message("请选择已安装的学校认证客户端 .app 应用。")
+        }
+        if usesWebPortal && !portalURL.isEmpty && validPortalURL == nil { throw AppError.message("认证地址需要以 http:// 或 https:// 开头。") }
     }
 }
 
@@ -114,6 +146,9 @@ struct AutoPolicy {
     func shouldJoin(enabled: Bool, target: String, current: String?, visible: [String], busy: Bool, now: Date) -> Bool {
         enabled && !target.isEmpty && current != target && visible.contains(target) && !busy && now.timeIntervalSince(lastAttempt) >= 60
     }
+    func shouldPrepareWired(enabled: Bool, needed: Bool, busy: Bool, now: Date) -> Bool {
+        enabled && needed && !busy && now.timeIntervalSince(lastAttempt) >= 60
+    }
     mutating func begin(at date: Date) { lastAttempt = date }
     mutating func reset() { lastAttempt = .distantPast }
 }
@@ -141,7 +176,7 @@ enum PortalFillRetry {
     static let maxAttempts = 200
     static let delay: TimeInterval = 0.15
     static func shouldRetry(result: String?, scriptFailed: Bool, attempt: Int) -> Bool {
-        attempt < maxAttempts && (scriptFailed || ["waiting-ready", "waiting-submit", "missing-fields", "missing-submit", "missing-service"].contains(result ?? ""))
+        attempt < maxAttempts && (scriptFailed || ["waiting-ready", "waiting-submit", "waiting-agreement", "missing-fields", "missing-submit", "missing-service"].contains(result ?? ""))
     }
 }
 
@@ -270,6 +305,7 @@ enum PortalScript {
               if (select.selectedOptions[0] !== option || select.disabled) return 'missing-service';
             }
           }
+          /*CAMPUS_AGREEMENTS*/
           // School handlers can reject/reset a value; never report success or submit it.
           if (!editable(user) || !editable(pass) || !visible(user) || !visible(pass) ||
               user.value !== cfg.username || pass.value !== cfg.password) return 'missing-fields';
@@ -340,6 +376,40 @@ enum PortalScript {
           submit.click();
           return 'submitted';
         })()
-        """
+        """.replacingOccurrences(of: "  /*CAMPUS_AGREEMENTS*/", with: agreementScript)
     }
+    static let agreementScript = #"""
+      // Activate required login checkboxes through school handlers.
+      // The caller has already checked network/origin and identified the login inputs.
+      {
+        const root = pass.form || document;
+        const attempted = window.__campusAgreementAttempts ||= new WeakMap();
+        const candidates = [...root.querySelectorAll('input[type="checkbox"],[role="checkbox"]')]
+          .filter(box => box instanceof HTMLInputElement ? box.type === 'checkbox' : box.getAttribute?.('role') === 'checkbox');
+        for (const box of candidates) {
+          if (box.form && box.form !== pass.form) continue;
+          const labels = [...(box.labels || [])];
+          const wrapper = box.closest('label,[role=checkbox],.checkbox,.agreement,.protocol');
+          if (wrapper && !labels.includes(wrapper)) labels.push(wrapper);
+          for (const id of (box.getAttribute('aria-labelledby') || '').split(/\s+/)) {
+            const label = document.getElementById(id);
+            if (label) labels.push(label);
+          }
+          const text = [box.getAttribute('aria-label'), ...labels.map(label => label.textContent),
+            box.getAttribute('role') === 'checkbox' ? box.textContent : '', box.id, box.name].join(' ');
+          if (/记住|自动登录|保持登录|订阅|推广|广告|促销|营销|优惠|newsletter|marketing|remember|stay\s+signed/i.test(text)) continue;
+          const agreement = /同意|已阅读|阅读并|服务(?:使用)?协议|用户协议|隐私政策|使用条款|\bagree\b|\baccept\b|\bterms\b|\bprivacy\b/i.test(text);
+          if (!box.required && box.getAttribute('aria-required') !== 'true' && !agreement) continue;
+          if (!visible(box) && !labels.some(visible)) continue;
+          const checked = () => box instanceof HTMLInputElement ? box.checked : box.getAttribute('aria-checked') === 'true';
+          if (checked()) continue;
+          if (box.disabled || box.getAttribute('aria-disabled') === 'true') return 'agreement-required';
+          const previous = attempted.get(box);
+          if (previous) return Date.now() - previous.started < 2000 ? 'waiting-agreement' : 'agreement-required';
+          attempted.set(box, { started: Date.now() });
+          box.click();
+          if (!checked()) return 'waiting-agreement';
+        }
+      }
+    """#
 }

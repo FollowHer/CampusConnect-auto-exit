@@ -8,11 +8,13 @@ final class WiredNetwork {
     static let shared = WiredNetwork()
     private let monitor = NWPathMonitor(requiredInterfaceType: .wiredEthernet)
     private(set) var available = false
+    private(set) var interfaces: [NWInterface] = []
     var onChange: (() -> Void)?
     private init() {
         monitor.pathUpdateHandler = { [weak self] path in
             guard let self else { return }
             self.available = path.status == .satisfied
+            self.interfaces = path.availableInterfaces
             self.onChange?()
         }
         monitor.start(queue: .main)
@@ -38,7 +40,7 @@ struct WiFiSnapshot {
 final class WiFiService {
     private let queue = DispatchQueue(label: "local.campusconnect.wifi", qos: .utility)
     func readConnection(profile: CampusProfile, completion: @escaping (Bool) -> Void) {
-        if profile.isWired { completion(WiredNetwork.shared.available); return }
+        if profile.isWired { completion(WiredSystem.connected(profile)); return }
         readCurrent { completion(profile.matchesNetwork(currentSSID: $0, wiredAvailable: false)) }
     }
     func readCurrent(completion: @escaping (String?) -> Void) {

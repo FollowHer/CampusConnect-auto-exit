@@ -3,6 +3,8 @@ import SwiftUI
 import CoreLocation
 import ServiceManagement
 import CoreServices
+import UniformTypeIdentifiers
+import SystemConfiguration
 
 enum Page: String, CaseIterable {
     case dashboard = "网络概览", settings = "校园网设置", portal = "上网认证"
@@ -22,8 +24,12 @@ enum Page: String, CaseIterable {
     @Published var wifiPassword = ""
     @Published var portalPassword = ""
     @Published var page = Page.dashboard
+    @Published var showingFeedback = false
     @Published var currentSSID: String?
     @Published var wiredConnected = false
+    @Published var wiredLink = false
+    @Published var ethernetInterfaces: [WiredInterface] = []
+    @Published var broadbandServices: [String] = []
     @Published var networks: [VisibleNetwork] = []
     @Published var scanning = false
     @Published var joining = false
@@ -41,6 +47,8 @@ enum Page: String, CaseIterable {
     @Published var startupMessage = "登录 Mac 后自动运行，开关立即生效。"
     let portal = PortalController()
     private let wifi = WiFiService()
+    private let wiredAuthentication = WiredAuthentication()
+    private var lastDraftSSID = "HNPI-STU"
     private let location = CLLocationManager()
     private var saved: CampusProfile
     private var policy = AutoPolicy()
@@ -53,7 +61,9 @@ enum Page: String, CaseIterable {
         let loaded = preview ? CampusProfile() : ((try? LocalStore.load())?.profile ?? CampusProfile())
         saved = loaded; draft = loaded; automatic = loaded.automatic
         super.init()
+        lastDraftSSID = loaded.isWired ? "HNPI-STU" : loaded.ssid
         if preview { return }
+        refreshWiredOptions()
         refreshStartup()
         WiredNetwork.shared.onChange = { [weak self] in
             guard let self, self.saved.isWired else { return }
@@ -89,12 +99,24 @@ enum Page: String, CaseIterable {
     }
     var wiredMode: Bool { saved.isWired }
     var campusConnected: Bool { saved.matchesNetwork(currentSSID: currentSSID, wiredAvailable: wiredConnected) }
-    var target: String { saved.isWired ? "有线网络" : saved.ssid }
+    var target: String { saved.isWired ? saved.connectionLabel : saved.ssid }
+    var usesSystemAuthentication: Bool { saved.usesSystemAuthentication }
+    var webPortalEnabled: Bool { saved.usesWebPortal }
+    var connectionLabel: String { saved.connectionLabel }
+    var systemAuthenticationHelp: String {
+        switch saved.wiredAuth {
+        case .pppoe: return "使用 macOS 已保存的 PPPoE 服务拨号，账号密码和网卡由该系统服务管理。"
+        case .dot1x: return "使用 macOS 网络设置中的 802.1X 描述文件；请启用系统自动连接，需要时在系统设置中点按「连接」。"
+        case .client: return "打开已选择的学校 macOS 客户端，账号、验证码和学校专有认证在该客户端中完成。"
+        case .web: return "插好网线并获取地址后，使用学校网页完成认证。"
+        }
+    }
     var changed: Bool { draft != saved }
     var connectionTitle: String {
         if joining { return "正在连接校园网" }
         if saved.isWired {
-            guard wiredConnected else { return "有线网络未连接，请插好网线" }
+            guard wiredLink else { return "有线网络未连接，请插好网线或检查所选接口" }
+            if !wiredConnected { return saved.usesSystemAuthentication ? "\(saved.connectionLabel) · 等待系统认证" : "有线链路已接入 · 等待获取网络地址" }
             return internet == true ? "有线校园网已连接 · 可上网" : internet == false ? "有线网络已连接 · 未联网" : "有线网络已连接 · 正在确认上网状态"
         }
         if !authorized { return "等待 Wi-Fi 访问授权" }
@@ -131,6 +153,7 @@ enum Page: String, CaseIterable {
         if saved.isWired {
             refreshWiredConnection()
             if wiredConnected { verifyInternet(openIfOffline: automatic) }
+            else if saved.usesSystemAuthentication && wiredLink && policy.shouldPrepareWired(enabled: automatic, needed: true, busy: joining, now: Date()) { prepareWired(manual: false) }
             return
         }
         guard authorized else { status = permissionText; return }
@@ -175,13 +198,15 @@ enum Page: String, CaseIterable {
             profile.portalURL = profile.portalURL.trimmingCharacters(in: .whitespacesAndNewlines)
             profile.username = profile.username.trimmingCharacters(in: .whitespacesAndNewlines)
             profile.serviceOption = profile.serviceOption.trimmingCharacters(in: .whitespacesAndNewlines)
+            profile.ethernetName = profile.ethernetName.trimmingCharacters(in: .whitespacesAndNewlines)
+            profile.broadbandName = profile.broadbandName.trimmingCharacters(in: .whitespacesAndNewlines)
             profile.automatic = enable
             try profile.validate()
             if !profile.isWired && profile.joinMode != .open && wifiPassword.isEmpty { throw AppError.message("请填写 Wi-Fi 密码。") }
-            if profile.portalEnabled && (profile.username.isEmpty || portalPassword.isEmpty) { throw AppError.message("请填写上网认证账号和密码。") }
+            if profile.usesWebPortal && (profile.username.isEmpty || portalPassword.isEmpty) { throw AppError.message("请填写上网认证账号和密码。") }
             try LocalStore.save(profile: profile, secrets: Secrets(wifi: wifiPassword, portal: portalPassword))
             saved = profile; draft = profile; automatic = enable
-            currentSSID = nil; wiredConnected = false; networks = []
+            currentSSID = nil; wiredConnected = false; wiredLink = false; networks = []
             policy.reset(); recovery.reset(); connectionGeneration += 1; internet = nil; authenticated = false
             stopAuthentication()
             record(enable ? "设置已保存，自动连接已开启。" : "设置已保存。")
@@ -201,20 +226,58 @@ enum Page: String, CaseIterable {
         }
     }
 
+    func refreshWiredOptions() {
+        ethernetInterfaces = WiredSystem.interfaces()
+        broadbandServices = WiredSystem.pppoeServices().compactMap { SCNetworkServiceGetName($0) as String? }.sorted()
+    }
+    func setDraftWired(_ wired: Bool) {
+        if wired {
+            if !draft.isWired { lastDraftSSID = draft.ssid }
+            draft.ssid = ""
+        } else if draft.isWired { draft.ssid = lastDraftSSID }
+    }
+    func chooseAuthenticationClient() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
+        panel.prompt = "选择客户端"
+        if panel.runModal() == .OK, let url = panel.url { draft.authenticationClient = url.path }
+    }
     private func refreshWiredConnection() {
-        let connected = WiredNetwork.shared.available
+        refreshWiredOptions()
+        let linked = WiredSystem.selected(saved, from: ethernetInterfaces)?.linked == true
+        let connected = WiredSystem.connected(saved)
         currentSSID = nil; networks = []; lastScan = Date()
-        if wiredConnected != connected {
-            wiredConnected = connected; connectionGeneration += 1; recovery.reset()
+        if wiredConnected != connected || wiredLink != linked {
+            wiredConnected = connected; wiredLink = linked; connectionGeneration += 1; recovery.reset()
             internet = nil; authenticated = false; stopAuthentication()
         }
-        if !connected { record("有线网络未连接，请插好网线并在系统中启用以太网。") }
+        if !linked { record("有线网络未连接，请插好网线并检查所选以太网接口。") }
+        else if !connected { record(saved.usesSystemAuthentication ? "有线链路已接入，等待系统认证和分配地址。" : "有线链路已接入，等待分配网络地址。") }
+    }
+    private func prepareWired(manual: Bool) {
+        guard saved.usesSystemAuthentication, wiredLink, !joining else { return }
+        joining = true; policy.begin(at: Date())
+        let expected = connectionGeneration
+        record("正在准备 \(saved.connectionLabel)…")
+        wiredAuthentication.prepare(saved, manual: manual) { [weak self] result in
+            guard let self, expected == self.connectionGeneration else { return }
+            self.joining = false
+            switch result {
+            case .success(let message): self.record(message)
+            case .failure(let error): self.record(error.localizedDescription)
+            }
+            if WiredSystem.connected(self.saved) { self.verifyInternet() }
+        }
     }
     func connect(manual: Bool = false) {
         guard !joining, !scanning else { return }
         if saved.isWired {
             refreshWiredConnection()
-            if wiredConnected { verifyInternet(openIfOffline: automatic, manual: manual) }
+            if saved.usesSystemAuthentication {
+                if wiredConnected && internet == true { verifyInternet() }
+                else if wiredLink { prepareWired(manual: manual) }
+            } else if wiredConnected { verifyInternet(openIfOffline: automatic, manual: manual) }
             return
         }
         guard authorized else { return }
@@ -246,10 +309,10 @@ enum Page: String, CaseIterable {
         let expected = connectionGeneration
         let expectedSSID = saved.ssid
         // Launch the first login immediately; internet verification runs afterwards.
-        if manual && saved.portalEnabled {
+        if manual && saved.usesWebPortal {
             openPortal()
         } else if openIfOffline && internet == nil && !portal.requiresInteraction &&
-            recovery.shouldAuthenticate(enabled: automatic, portalEnabled: saved.portalEnabled, now: Date()) {
+            recovery.shouldAuthenticate(enabled: automatic, portalEnabled: saved.usesWebPortal, now: Date()) {
             record("正在立即发起校园网认证…")
             openPortal(showPage: false)
         }
@@ -266,8 +329,10 @@ enum Page: String, CaseIterable {
                     self.authenticated = false
                     self.portal.reportInternetUnavailable()
                     self.record("百度 ping 不通，判定未联网。")
-                    if self.automatic && self.saved.autoSubmit && !self.portal.isAuthenticating &&
-                        self.recovery.shouldAuthenticate(enabled: self.automatic, portalEnabled: self.saved.portalEnabled, now: Date()) {
+                    if self.automatic && self.saved.usesSystemAuthentication && self.policy.shouldPrepareWired(enabled: true, needed: true, busy: self.joining, now: Date()) {
+                        self.prepareWired(manual: false)
+                    } else if self.automatic && self.saved.autoSubmit && !self.portal.isAuthenticating &&
+                        self.recovery.shouldAuthenticate(enabled: self.automatic, portalEnabled: self.saved.usesWebPortal, now: Date()) {
                         self.record("百度 ping 不通，正在重新连接校园网认证…")
                         self.openPortal(showPage: false)
                     }
@@ -276,9 +341,11 @@ enum Page: String, CaseIterable {
         }
     }
     func stopAuthentication() {
+        wiredAuthentication.cancel(); joining = false
         portal.stop()
     }
     func openPortal(discover: Bool = false, showPage: Bool = true) {
+        guard saved.usesWebPortal else { record("当前使用系统认证，请通过当前连接方式完成认证。"); return }
         guard campusConnected else { record(saved.isWired ? "请先插好网线并启用有线网络。" : "请先连接 \(saved.ssid)。"); return }
         do {
             var profile = saved
@@ -339,17 +406,17 @@ struct RootView: View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 28) {
                 HStack(spacing: 11) {
-                    Image(systemName: "wifi").font(.system(size: 26, weight: .semibold)).foregroundStyle(.white)
+                    Image(systemName: "network").font(.system(size: 26, weight: .semibold)).foregroundStyle(.white)
                         .frame(width: 48, height: 48).background(accent, in: RoundedRectangle(cornerRadius: 15))
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("校园 Wi-Fi").font(.system(size: 19, weight: .bold))
+                        Text("校园网络").font(.system(size: 19, weight: .bold))
                         Text("CAMPUS CONNECT").font(.system(size: 9, weight: .semibold)).tracking(1.5).foregroundStyle(.secondary)
                     }
                 }.padding(.top, 26)
                 VStack(spacing: 7) {
                     ForEach(Page.allCases, id: \.self) { page in
                         Button { model.selectPage(page) } label: {
-                            HStack(spacing: 12) { Image(systemName: page.icon).frame(width: 20); Text(page.rawValue); Spacer() }
+                            HStack(spacing: 12) { Image(systemName: page == .dashboard && model.wiredMode ? "network" : page.icon).frame(width: 20); Text(page.rawValue); Spacer() }
                                 .font(.system(size: 13, weight: model.page == page ? .semibold : .regular))
                                 .padding(.horizontal, 14)
                                 .foregroundStyle(model.page == page ? accent : Color.primary)
@@ -374,6 +441,19 @@ struct RootView: View {
                         Text("By Ye")
                         Text("MIT 开源项目")
                     }.font(.system(size: 11)).foregroundStyle(.secondary).padding(.bottom, 6)
+                    Button { model.showingFeedback.toggle() } label: {
+                        HStack(spacing: 5) {
+                            Text("如果遇到问题请点击：").foregroundStyle(.secondary)
+                            Image(systemName: "exclamationmark.circle.fill").font(.system(size: 16)).foregroundStyle(accent)
+                        }.font(.system(size: 11))
+                    }
+                    .buttonStyle(.plain)
+                    .help("查看问题反馈方式")
+                    .popover(isPresented: $model.showingFeedback, arrowEdge: .bottom) {
+                        (Text("使用中如有任何问题，请关注抖音 ") + Text("3325725312q").fontWeight(.semibold) + Text("，进群反馈。"))
+                            .font(.system(size: 12)).lineSpacing(4).textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true).padding(16).frame(width: 270)
+                    }
                     Label("本地运行", systemImage: "lock.shield").font(.system(size: 12, weight: .semibold))
                     Text("账号密码保存在本机配置文件\n关闭窗口后仍可在菜单栏运行")
                         .font(.system(size: 11)).foregroundStyle(.secondary).lineSpacing(4)
@@ -418,7 +498,7 @@ struct RootView: View {
                         Text(model.status).font(.system(size: 11)).lineLimit(2)
                     }
                     Spacer()
-                    Text("v1.5.2 · macOS").font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text("v2.0.0-beta.2 · macOS").font(.system(size: 10)).foregroundStyle(.secondary)
                 }.padding(.horizontal, 24).padding(.vertical, 12)
             }.background(Color(nsColor: .textBackgroundColor))
         }.frame(minWidth: 980, minHeight: 700).tint(accent).textSelection(.disabled)
@@ -426,9 +506,9 @@ struct RootView: View {
     }
     var subtitle: String {
         switch model.page {
-        case .dashboard: return "到达校园，连接自动完成。"
+        case .dashboard: return "当前连接方式：\(model.connectionLabel)。"
         case .settings: return "设置目标网络、账号和上网认证方式。"
-        case .portal: return "在校园网内打开登录页并填写已保存的凭据。"
+        case .portal: return model.usesSystemAuthentication ? "通过系统或学校客户端完成认证。" : "在校园网内打开登录页并填写已保存的凭据。"
         }
     }
     func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -459,7 +539,7 @@ struct RootView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("自动连接与认证").font(.system(size: 15, weight: .semibold))
-                            Text(model.wiredMode ? "接入有线网络后，使用已保存账号进行上网认证。" : "发现 \(model.target) 后连接，并使用已保存账号登录。")
+                            Text(model.wiredMode ? model.systemAuthenticationHelp : "发现 \(model.target) 后连接，并使用已保存账号登录。")
                                 .font(.system(size: 12)).foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -487,8 +567,8 @@ struct RootView: View {
                     }
                     if model.networks.isEmpty {
                         VStack(spacing: 10) {
-                            Image(systemName: "antenna.radiowaves.left.and.right").font(.system(size: 28)).foregroundStyle(.secondary)
-                            Text(model.wiredMode ? "无需填写 Wi-Fi 名称；接好网线后即可进行网页认证。" : model.authorized ? "点击刷新扫描附近网络" : "授权定位后显示真实网络列表").font(.system(size: 13)).foregroundStyle(.secondary)
+                            Image(systemName: model.wiredMode ? "network" : "antenna.radiowaves.left.and.right").font(.system(size: 28)).foregroundStyle(.secondary)
+                            Text(model.wiredMode ? model.systemAuthenticationHelp : model.authorized ? "点击刷新扫描附近网络" : "授权定位后显示真实网络列表").font(.system(size: 13)).foregroundStyle(.secondary)
                         }.frame(maxWidth: .infinity).padding(.vertical, 28)
                     } else {
                         ForEach(model.networks) { network in
@@ -538,9 +618,38 @@ struct RootView: View {
                 card {
                     VStack(alignment: .leading, spacing: 16) {
                         Label("校园网络", systemImage: "network").font(.system(size: 16, weight: .semibold))
-                        field("Wi-Fi 名称（有线模式留空）", text: $model.draft.ssid, prompt: "留空使用有线网络")
-                        if !model.draft.isWired {
-                            Picker("连接方式", selection: $model.draft.joinMode) {
+                        Picker("连接方式", selection: Binding(get: { model.draft.isWired }, set: { model.setDraftWired($0) })) {
+                            Text("Wi-Fi 无线网络").tag(false)
+                            Text("有线网络（以太网）").tag(true)
+                        }.pickerStyle(.segmented)
+                        if model.draft.isWired {
+                            Picker("有线认证方式", selection: $model.draft.wiredAuth) {
+                                ForEach(WiredAuth.allCases) { Text($0.title).tag($0) }
+                            }
+                            if model.draft.wiredAuth != .pppoe {
+                                field("以太网接口（可留空自动选择）", text: $model.draft.ethernetName, prompt: "例如 en5")
+                                Text(model.ethernetInterfaces.isEmpty ? "尚未检测到以太网接口，请接入网卡。" : "可用接口：" + model.ethernetInterfaces.map(\.title).joined(separator: "、"))
+                                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                            }
+                            if model.draft.wiredAuth == .pppoe {
+                                field("已保存的 PPPoE 服务名称", text: $model.draft.broadbandName, prompt: "与 macOS 网络设置中的名称完全一致")
+                                Text(model.broadbandServices.isEmpty ? "请先在系统网络设置中创建 PPPoE 服务并保存凭据。" : "已有 PPPoE 服务：" + model.broadbandServices.joined(separator: "、"))
+                                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                            }
+                            if model.draft.wiredAuth == .dot1x {
+                                Text("先按学校要求安装 802.1X 描述文件、配置证书和凭据，并在系统网络设置中启用自动连接；手动认证时在系统设置中点按「连接」。")
+                                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                            }
+                            if model.draft.wiredAuth == .client {
+                                field("学校认证客户端", text: $model.draft.authenticationClient, prompt: "选择已安装的 .app")
+                                Button("选择客户端…") { model.chooseAuthenticationClient() }
+                            }
+                            if model.draft.wiredAuth != .web {
+                                Button("打开 macOS 网络设置") { NSWorkspace.shared.open(WiredAuthentication.networkSettings) }
+                            }
+                        } else {
+                            field("Wi-Fi 名称", text: $model.draft.ssid, prompt: "输入校园 Wi-Fi 名称")
+                            Picker("Wi-Fi 安全方式", selection: $model.draft.joinMode) {
                                 ForEach(JoinMode.allCases) { Text($0.title).tag($0) }
                             }.pickerStyle(.segmented)
                             if model.draft.joinMode == .enterprise { field("Wi-Fi 企业认证用户名", text: $model.draft.wifiUsername) }
@@ -551,10 +660,11 @@ struct RootView: View {
                                 }
                             }
                         }
-                        Text(model.draft.isWired ? "有线模式：无需 Wi-Fi 和定位权限。接好网线后，填写下方认证地址与上网账号密码。" : "Wi-Fi 名称精确匹配；有线网络请清空名称。学号和密码在下方网页认证中填写。")
+                        Text(model.draft.isWired ? "有线模式无需填写 Wi-Fi 名称或授予定位权限。修改后保存，实际连接才会使用所选方式。" : "Wi-Fi 名称精确匹配；学号和密码在下方网页认证中填写。")
                             .font(.system(size: 11)).foregroundStyle(.secondary)
                     }
                 }
+                if !model.draft.usesSystemAuthentication {
                 card {
                     VStack(alignment: .leading, spacing: 16) {
                         Toggle("连接后进行上网认证", isOn: $model.draft.portalEnabled).font(.system(size: 15, weight: .semibold))
@@ -583,6 +693,7 @@ struct RootView: View {
                         }
                     }
                 }
+                }
                 HStack(spacing: 12) {
                     Button("保存并开启自动连接") { _ = model.save(enable: true) }.buttonStyle(.borderedProminent)
                     Button("保存设置") { _ = model.save(enable: model.automatic) }
@@ -601,6 +712,18 @@ struct PortalPage: View {
     @ObservedObject var model: AppModel
     @ObservedObject var portal: PortalController
     var body: some View {
+        if model.usesSystemAuthentication {
+            VStack(alignment: .leading, spacing: 16) {
+                Label(model.connectionLabel, systemImage: "network").font(.system(size: 20, weight: .semibold))
+                Text(model.systemAuthenticationHelp).foregroundStyle(.secondary)
+                HStack {
+                    Button("开始系统认证") { model.connect(manual: true) }.buttonStyle(.borderedProminent).disabled(model.joining)
+                    Button("检查上网状态") { model.verifyInternet() }.disabled(!model.campusConnected)
+                    Button("打开网络设置") { NSWorkspace.shared.open(WiredAuthentication.networkSettings) }
+                }
+                Spacer()
+            }.padding(26).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        } else {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Button("立即认证") { model.openPortal() }.buttonStyle(.borderedProminent).disabled(!model.campusConnected)
@@ -621,6 +744,7 @@ struct PortalPage: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.1)))
         }.padding(24)
+        }
     }
 }
 
@@ -664,8 +788,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _model = StateObject(wrappedValue: AppModel())
     }
     var body: some Scene {
-        WindowGroup("校园 Wi-Fi 助手", id: "main") { RootView(model: model) }.defaultSize(width: 1060, height: 760)
-        MenuBarExtra("校园 Wi-Fi", systemImage: "wifi") {
+        WindowGroup("校园网助手", id: "main") { RootView(model: model) }.defaultSize(width: 1060, height: 760)
+        MenuBarExtra("校园网络", systemImage: model.wiredMode ? "network" : "wifi") {
             MenuBarControls(model: model)
         }
     }

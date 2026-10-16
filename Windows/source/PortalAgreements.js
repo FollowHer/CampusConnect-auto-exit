@@ -1,4 +1,4 @@
-  // Windows-only extension: activate required login checkboxes through school handlers.
+  // Activate required login checkboxes through school handlers.
   // The caller has already checked network/origin and identified the login inputs.
   {
     const root = pass.form || document;

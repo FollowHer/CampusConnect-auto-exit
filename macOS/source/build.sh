@@ -12,9 +12,9 @@ cp "${task_source_dir}/Info.plist" "${task_app}/Contents/Info.plist"
 for task_arch in arm64 x86_64; do
 xcrun swiftc -swift-version 5 -O -target "${task_arch}-apple-macosx14.0" \
   "${task_source_dir}/Core.swift" "${task_source_dir}/WiFi.swift" \
-  "${task_source_dir}/Connectivity.swift" "${task_source_dir}/CampusProxy.swift" "${task_source_dir}/Portal.swift" "${task_source_dir}/App.swift" \
+  "${task_source_dir}/WiredAuthentication.swift" "${task_source_dir}/Connectivity.swift" "${task_source_dir}/CampusProxy.swift" "${task_source_dir}/Portal.swift" "${task_source_dir}/App.swift" \
   -framework SwiftUI -framework AppKit -framework CoreWLAN \
-  -framework CoreLocation -framework WebKit -framework Network -framework ServiceManagement \
+  -framework CoreLocation -framework SystemConfiguration -framework WebKit -framework Network -framework ServiceManagement \
   -o "${task_build_dir}/CampusConnect-${task_arch}"
 done
 xcrun lipo -create "${task_build_dir}/CampusConnect-arm64" "${task_build_dir}/CampusConnect-x86_64" \

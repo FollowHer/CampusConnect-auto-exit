@@ -88,6 +88,46 @@ import JavaScriptCore
         expect(wired.isWired, "whitespace selects wired mode")
         wired.portalURL = "javascript:alert(1)"
         do { try wired.validate(); expect(false, "invalid wired portal accepted") } catch { checks += 1 }
+        let legacyWired = try JSONDecoder().decode(CampusProfile.self, from: Data("{\"ssid\":\"\"}".utf8))
+        expect(legacyWired.isWired && legacyWired.wiredAuth == .web, "legacy blank SSID uses wired web authentication")
+        for mode in WiredAuth.allCases {
+            var system = CampusProfile(); system.ssid = ""; system.wiredAuth = mode
+            system.ethernetName = "en5"; system.broadbandName = "Campus PPPoE"
+            system.authenticationClient = "/Applications/School Client.app"
+            if mode != .web { system.portalURL = "invalid-unused-web-url" }
+            try system.validate()
+            let decoded = try JSONDecoder().decode(CampusProfile.self, from: JSONEncoder().encode(system))
+            expect(decoded == system, "all wired protocol fields survive save/reload")
+            expect(system.usesSystemAuthentication == (mode != .web), "system mode detection")
+            expect(system.usesWebPortal == (mode == .web), "system authentication never sends webpage credentials")
+            expect(!system.connectionLabel.contains("Wi-Fi"), "wired labels have no stale Wi-Fi")
+        }
+        var invalidWired = CampusProfile(); invalidWired.ssid = ""; invalidWired.wiredAuth = .pppoe
+        do { try invalidWired.validate(); expect(false, "PPPoE requires saved service name") } catch { checks += 1 }
+        invalidWired.broadbandName = "Campus\nOther"
+        do { try invalidWired.validate(); expect(false, "PPPoE rejects control characters") } catch { checks += 1 }
+        invalidWired.wiredAuth = .client; invalidWired.authenticationClient = "/Applications/Client.exe"
+        do { try invalidWired.validate(); expect(false, "school client must be a Mac app") } catch { checks += 1 }
+        do {
+            _ = try JSONDecoder().decode(CampusProfile.self, from: Data("{\"wiredAuth\":\"unknown\"}".utf8))
+            expect(false, "unknown authentication mode rejected")
+        } catch { checks += 1 }
+        let noIP = WiredInterface(name: "en5", title: "USB Ethernet", linked: true, hasAddress: false)
+        let other = WiredInterface(name: "en6", title: "Other Ethernet", linked: true, hasAddress: true)
+        expect(WiredSystem.select(name: "en5", from: [other, noIP]) == noIP, "selected linked adapter usable before DHCP for system authentication")
+        expect(WiredSystem.select(name: "missing", from: [other, noIP]) == nil, "missing selected adapter never falls back")
+        expect(WiredSystem.select(name: "", from: [noIP, other]) == noIP, "automatic adapter selection does not require IP")
+        expect(WiredSystem.select(name: "", from: []) == nil, "no Ethernet never falls back to Wi-Fi")
+        expect(!WiredSystem.connected(invalidWired), "missing configured system connection cannot be authenticated")
+        expect(PortalFillRetry.shouldRetry(result: "waiting-agreement", scriptFailed: false, attempt: 1), "asynchronous checkbox retries")
+        expect(!PortalFillRetry.shouldRetry(result: "agreement-required", scriptFailed: false, attempt: 1), "rejected checkbox requires manual action")
+        var wiredPolicy = AutoPolicy()
+        expect(wiredPolicy.shouldPrepareWired(enabled: true, needed: true, busy: false, now: Date()), "system authentication first attempt immediate")
+        let wiredNow = Date(); wiredPolicy.begin(at: wiredNow)
+        expect(!wiredPolicy.shouldPrepareWired(enabled: true, needed: true, busy: false, now: wiredNow.addingTimeInterval(59)), "system authentication has cooldown")
+        expect(wiredPolicy.shouldPrepareWired(enabled: true, needed: true, busy: false, now: wiredNow.addingTimeInterval(61)), "system authentication retries after cooldown")
+        expect(!wiredPolicy.shouldPrepareWired(enabled: false, needed: true, busy: false, now: wiredNow.addingTimeInterval(600)), "pause blocks system authentication")
+        expect(!wiredPolicy.shouldPrepareWired(enabled: true, needed: true, busy: true, now: wiredNow.addingTimeInterval(600)), "no concurrent system authentication")
         var policy = AutoPolicy()
         let now = Date()
         expect(!policy.shouldJoin(enabled: true, target: "", current: nil, visible: [""], busy: false, now: now), "wired mode never joins Wi-Fi")
@@ -165,7 +205,7 @@ import JavaScriptCore
           var pass = new HTMLInputElement('password','password');
           var submit = {type:'submit',disabled:false,getClientRects(){return [1]},click(){clicks++}};
           var document = {
-            querySelectorAll(s){if(s==='input[type="password"]')return [pass]; if(s.startsWith('button'))return [submit];return [user];},
+            querySelectorAll(s){if(s==='input[type="checkbox"],[role="checkbox"]')return [];if(s==='input[type="password"]')return [pass]; if(s.startsWith('button'))return [submit];return [user];},
             querySelector(s){if(s==='[')throw Error('selector');if(s==='#username')return user;return null;}
           };
         """)

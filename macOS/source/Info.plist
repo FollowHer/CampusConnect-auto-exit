@@ -4,10 +4,11 @@
 <key>CFBundleExecutable</key><string>CampusConnect</string>
 <key>CFBundleIdentifier</key><string>local.campusconnect.mac</string>
 <key>CFBundleName</key><string>CampusConnect</string>
-<key>CFBundleDisplayName</key><string>校园 Wi-Fi 助手</string>
+<key>CFBundleDisplayName</key><string>校园网助手</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>1.5.2</string>
-<key>CFBundleVersion</key><string>152</string>
+<key>CFBundleShortVersionString</key><string>2.0.0</string>
+<key>CFBundleGetInfoString</key><string>CampusConnect 2.0.0-beta.2</string>
+<key>CFBundleVersion</key><string>2002</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSHighResolutionCapable</key><true/>

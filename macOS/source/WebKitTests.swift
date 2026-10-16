@@ -70,7 +70,7 @@ import WebKit
         var result = ""
         for _ in 0..<20 {
             result = try await fill(service: service)
-            if !["waiting-submit", "waiting-ready"].contains(result) { return result }
+            if !["waiting-submit", "waiting-ready", "waiting-agreement"].contains(result) { return result }
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         return result
@@ -196,6 +196,33 @@ import WebKit
         try expect(try await js(statusScript) as? String == "authentication-rejected", "rejection is not success")
         try expect(try await fill() == "authentication-rejected", "rejection never resubmits")
         try expect(try await js("loginCalls") as? Int == 1, "rejection has one request")
+        try await load()
+        try await js("document.body.insertAdjacentHTML('beforeend', '<label><input id=terms type=checkbox required onclick=\"window.termClicks=(window.termClicks||0)+1\">我已阅读并同意用户协议</label><label><input id=remember type=checkbox>记住密码</label>');true")
+        try expect(try await pump() == "submitted", "native WebKit checks terms before login")
+        try expect(try await js("document.getElementById('terms').checked") as? Bool == true, "required terms checked")
+        try expect(try await js("termClicks") as? Int == 1, "page checkbox event runs once")
+        try expect(try await js("document.getElementById('remember').checked") as? Bool == false, "remember password unchanged")
+        try expect(try await fill() == "already-submitted", "agreement login deduplicated")
+        try expect(try await js("termClicks") as? Int == 1, "no repeated term clicks")
+        try await load()
+        try await js("document.body.insertAdjacentHTML('beforeend', '<label><input id=terms type=checkbox required disabled>同意协议</label>');true")
+        try expect(try await fill() == "agreement-required", "disabled agreement blocks submission")
+        try expect(try await js("loginCalls") as? Int == 0, "disabled agreement does not send credentials")
+        try await load()
+        try await js("document.body.insertAdjacentHTML('beforeend', '<label><input id=terms type=checkbox required>同意协议</label>');document.getElementById('terms').onclick=event=>event.preventDefault();true")
+        try expect(try await fill() == "waiting-agreement", "rejected click awaits page confirmation")
+        try await js("window.__campusAgreementAttempts.get(document.getElementById('terms')).started-=3000;true")
+        try expect(try await fill() == "agreement-required", "rejected agreement becomes manual")
+        try expect(try await js("loginCalls") as? Int == 0, "rejected agreement never logs in")
+        try await load()
+        try await js("document.body.insertAdjacentHTML('beforeend', '<label><input id=terms type=checkbox required>同意协议</label>');document.getElementById('terms').onclick=event=>{event.preventDefault();setTimeout(()=>document.getElementById('terms').checked=true,100)};true")
+        try expect(try await fill() == "waiting-agreement", "asynchronous terms wait")
+        try expect(try await pump() == "submitted", "asynchronous terms resume login")
+        try expect(try await js("loginCalls") as? Int == 1, "asynchronous terms submit once")
+        try await load()
+        try await js("document.body.insertAdjacentHTML('beforeend', '<span id=terms role=checkbox aria-required=true aria-checked=false tabindex=0>同意协议</span>');document.getElementById('terms').onclick=function(){this.setAttribute('aria-checked','true')};true")
+        try expect(try await pump() == "submitted", "ARIA checkbox handled natively")
+        try expect(try await js("document.getElementById('terms').getAttribute('aria-checked')") as? String == "true", "ARIA terms confirmed")
         print("PASS: \(checks) native WKWebView checks (first click, handler readiness, asynchronous handoff, deduplication, manual mode, origin and service selection).")
     }
 }
