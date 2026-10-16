@@ -9,13 +9,27 @@
 >
 > **抖音：3325725312q**，或者添加本人 **QQ：3325725312**。欢迎学习交流！
 
-Windows 和 macOS 最新版为 **1.5.2**：新增有线模式，**Wi-Fi 名称留空**即可使用有线网络进行校园网网页认证。Windows 保留 [1.5.1 后台恢复修复](Windows/1.5.1-更新说明.md)。
+Windows **2.0 测试版（2.0.0-beta.1）** 已开放：[下载测试版](https://github.com/Ye9137/CampusConnect/releases/tag/windows-v2.0.0-beta.1) · [测试说明](Windows/2.0-测试版说明.md)。新增明确的有线 / Wi-Fi 选择、PPPoE、802.1X 和学校客户端入口，以及登录必选框、协议框自动勾选。
+
+Windows 和 macOS 稳定版为 **1.5.2**：新增有线模式，**Wi-Fi 名称留空**即可使用有线网络进行校园网网页认证。Windows 保留 [1.5.1 后台恢复修复](Windows/1.5.1-更新说明.md)。
 [![Build](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml/badge.svg)](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 由 [Ye9137](https://github.com/Ye9137) 维护，使用 MIT 许可证开源。
 
 分别为 macOS 和 Windows 制作的桌面校园网连接工具。默认校园 Wi-Fi 为 `HNPI-STU`，认证地址为 `http://192.168.0.123`，可在设置中修改。
+
+## Windows 2.0 测试版
+
+本次只更新 Windows。选择「有线网络（以太网）」后，可进一步选择网页认证、PPPoE 宽带拨号、802.1X 系统认证或学校专用客户端。旧版 Wi-Fi 名称留空的配置继续识别为有线模式；修改后需保存才会用于实际连接。有线模式的图标、窗口/托盘标题与提示已统一修正。
+
+网页认证会自动勾选可识别的登录必选框和协议项，触发网页原有事件；勾选被拒绝或需要人工确认时停止自动提交。记住密码、推广订阅等可选项保留原状。
+
+PPPoE、802.1X 需先在 Windows 完成相应配置；专用客户端模式负责启动已安装的学校客户端，客户端内登录仍由客户端处理。本测试版的真实校园网络、Windows 原生安装与新认证方式验证范围见 [测试说明](Windows/2.0-测试版说明.md)。
+
+![Windows 2.0 测试版有线模式设置](docs/screenshots/windows-2.0-beta-wired-settings.png)
+
+![Windows 2.0 测试版 PPPoE 设置](docs/screenshots/windows-2.0-beta-pppoe-settings.png)
 
 ## 1.5.2 有线模式
 
@@ -38,9 +52,11 @@ ping 使用系统路由，可能经过 VPN。Windows x64 与 macOS Apple 芯片 
 
 ## 下载
 
+**[Windows 2.0 测试版（x64）](https://github.com/Ye9137/CampusConnect/releases/download/windows-v2.0.0-beta.1/CampusConnect-Windows-x64-2.0.0-beta.1-Setup.exe)** · [测试版详情](Windows/2.0-测试版说明.md)
+
 **[Windows 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/v1.5.2/CampusConnect-Windows-x64-1.5.2-Setup.exe)** · **[macOS 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v1.5.2/CampusConnect-macOS-universal-1.5.2.zip)** · [GitHub 发布版本](https://github.com/Ye9137/CampusConnect/releases) · [Gitee 国内下载](https://gitee.com/lyz9137/CampusConnect/releases)
 
-## 界面预览
+## 1.5.2 稳定版界面预览
 
 以下为 Windows 1.5.2 界面预览，使用当前版本的内置界面离线生成，展示未连接状态；账号、密码均为空。实际学校认证页面会在连接校园网后加载。
 
