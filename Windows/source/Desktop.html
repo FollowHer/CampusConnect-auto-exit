@@ -66,6 +66,7 @@ details>summary{list-style:none;cursor:pointer;font-size:13px}details>summary:be
 .spinner{width:15px;height:15px;border:2px solid #ddd;border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
 [hidden]{display:none!important}@keyframes spin{to{transform:rotate(360deg)}}.header-actions{display:flex;gap:12px;align-items:center}
 @media(prefers-color-scheme:dark){:root{color-scheme:dark;--text:#eee;--muted:#99999f;--line:rgba(255,255,255,.09);--sidebar:#282829;--page:#1e1e1e;--card:#29292b;--button:#3a3a3c;--input:#363638;--accent:#15929c;--accent-soft:#1d393c}button{border-color:#555}.segment{background:#222;border-color:#444}.segment button.active{background:#555}.field input{border-color:#555}}
+.feedback-note{font-size:11px;color:var(--muted);line-height:1.7;margin:0 0 16px}.feedback-note strong{font-weight:600;color:var(--text);-webkit-user-select:text;user-select:text;cursor:text}
 .author{font-size:11px;font-weight:400;color:var(--muted);text-align:left}
 .license-note{font-size:11px;color:var(--muted);margin:3px 0 16px}
 button{transition:background-color .16s,color .16s,box-shadow .16s,transform .16s}
@@ -84,7 +85,7 @@ select {font:inherit;border:1px solid var(--border,#ddd);border-radius:8px;paddi
     <button data-page="settings"><i data-icon="sliders"></i>校园网设置</button>
     <button data-page="portal"><i data-icon="globe"></i>上网认证</button>
   </nav>
-  <div class="sidebar-footer"><div class="author">By Ye</div><div class="license-note">MIT 开源项目</div><div class="row"><i data-icon="shield"></i>本地运行</div><div class="small muted">账号密码加密保存在本机<br>关闭窗口后仍可在托盘运行</div></div>
+  <div class="sidebar-footer"><div class="author">By Ye</div><div class="license-note">MIT 开源项目</div><div class="feedback-note" aria-label="问题反馈">使用中如有任何问题<br>请关注抖音 <strong>3325725312q</strong><br>进群反馈。</div><div class="row"><i data-icon="shield"></i>本地运行</div><div class="small muted">账号密码加密保存在本机<br>关闭窗口后仍可在托盘运行</div></div>
 </aside>
 <main class="main">
   <header class="header"><div><h1 id="title">网络概览</h1><div class="subtitle" id="subtitle">到达校园，连接自动完成。</div></div><div class="header-actions"><div class="spinner" id="busy" hidden></div><button class="refresh" data-action="refresh"><i data-icon="refresh"></i>刷新网络</button></div></header>
@@ -158,7 +159,7 @@ select {font:inherit;border:1px solid var(--border,#ddd);border-radius:8px;paddi
       <div class="portal-slot" id="portal-slot"><div class="hint"><i data-icon="globe"></i><p>学校认证页面将在这里打开<br><span id="portal-connection-hint">请先连接已设置的校园 Wi-Fi</span></p></div></div>
     </section>
   </div>
-  <footer class="footer"><span class="dot" id="status-dot"></span><span class="status" id="status">准备就绪</span><span class="version">v2.0.0-beta.1 · Windows</span></footer>
+  <footer class="footer"><span class="dot" id="status-dot"></span><span class="status" id="status">准备就绪</span><span class="version">v2.0.0-beta.2 · Windows</span></footer>
 </main>
 </div>
 <script>

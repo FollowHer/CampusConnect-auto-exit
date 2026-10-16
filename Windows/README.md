@@ -1,10 +1,12 @@
 # Windows 版
 
-## 2.0 测试版（2.0.0-beta.1）：连接方式与自动勾选
+## 2.0 测试版（2.0.0-beta.2）：连接方式、自动勾选与反馈入口
+
+Windows 界面左下角新增反馈说明：使用中如有任何问题，请关注抖音 **3325725312q**，进群反馈。
 
 本次仅更新 Windows，macOS 保持 1.5.2。此版本以 GitHub Pre-release 发布，供测试验证。
 
-[下载 Windows 2.0 测试版](https://github.com/Ye9137/CampusConnect/releases/tag/windows-v2.0.0-beta.1) · [测试说明](2.0-测试版说明.md)
+[下载 Windows 2.0 测试版](https://github.com/Ye9137/CampusConnect/releases/tag/windows-v2.0.0-beta.2) · [测试说明](2.0-测试版说明.md)
 
 在「校园网设置」明确选择 **Wi-Fi 无线网络** 或 **有线网络（以太网）**。旧配置的 Wi-Fi 名称留空仍映射为有线模式。修改后需保存才会用于实际连接；窗口标题、网络概览图标和认证页提示使用当前已保存的方式。侧栏统一显示「校园网络」。
 

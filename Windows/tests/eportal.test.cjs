@@ -3,9 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const template = fs.readFileSync(path.join(__dirname, '../source/PortalTemplate.js'), 'utf8');
+const template = fs.readFileSync(path.join(__dirname, '../source/PortalTemplate.js'), 'utf8').replace(/\r\n/g, '\n');
 // Verify the Mac embedded script stays identical, including regex escaping.
-const core = fs.readFileSync(path.join(__dirname, '../../macOS/source/Core.swift'), 'utf8');
+const core = fs.readFileSync(path.join(__dirname, '../../macOS/source/Core.swift'), 'utf8').replace(/\r\n/g, '\n');
 const macScript = core.slice(core.indexOf('        (() => {'), core.indexOf('        """', core.indexOf('        (() => {')))
   .split('\n').map(line => line.startsWith('        ') ? line.slice(8) : line).join('\n')
   .replace('\\(json)', '/*CAMPUS_CONFIG*/').replaceAll('\\\\', '\\');

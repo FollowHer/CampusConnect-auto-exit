@@ -22,7 +22,7 @@ Unicode true
   !define RUNTIME "win-x64"
 !endif
 !ifndef VERSION
-  !define VERSION "2.0.0-beta.1"
+  !define VERSION "2.0.0-beta.2"
 !endif
 !ifndef SIZE_KB
   !define SIZE_KB 0

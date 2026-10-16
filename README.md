@@ -9,7 +9,7 @@
 >
 > **抖音：3325725312q**，或者添加本人 **QQ：3325725312**。欢迎学习交流！
 
-Windows **2.0 测试版（2.0.0-beta.1）** 已开放：[下载测试版](https://github.com/Ye9137/CampusConnect/releases/tag/windows-v2.0.0-beta.1) · [测试说明](Windows/2.0-测试版说明.md)。新增明确的有线 / Wi-Fi 选择、PPPoE、802.1X 和学校客户端入口，以及登录必选框、协议框自动勾选。
+Windows **2.0 测试版（2.0.0-beta.2）** 已开放：[下载测试版](https://github.com/Ye9137/CampusConnect/releases/tag/windows-v2.0.0-beta.2) · [测试说明](Windows/2.0-测试版说明.md)。新增明确的有线 / Wi-Fi 选择、PPPoE、802.1X 和学校客户端入口，以及登录必选框、协议框自动勾选。
 
 Windows 和 macOS 稳定版为 **1.5.2**：新增有线模式，**Wi-Fi 名称留空**即可使用有线网络进行校园网网页认证。Windows 保留 [1.5.1 后台恢复修复](Windows/1.5.1-更新说明.md)。
 [![Build](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml/badge.svg)](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml)
@@ -20,6 +20,8 @@ Windows 和 macOS 稳定版为 **1.5.2**：新增有线模式，**Wi-Fi 名称�
 分别为 macOS 和 Windows 制作的桌面校园网连接工具。默认校园 Wi-Fi 为 `HNPI-STU`，认证地址为 `http://192.168.0.123`，可在设置中修改。
 
 ## Windows 2.0 测试版
+
+Beta 2 在 Windows 界面左下角增加抖音问题反馈说明：关注 **3325725312q**，进群反馈。
 
 本次只更新 Windows。选择「有线网络（以太网）」后，可进一步选择网页认证、PPPoE 宽带拨号、802.1X 系统认证或学校专用客户端。旧版 Wi-Fi 名称留空的配置继续识别为有线模式；修改后需保存才会用于实际连接。有线模式的图标、窗口/托盘标题与提示已统一修正。
 
@@ -52,7 +54,7 @@ ping 使用系统路由，可能经过 VPN。Windows x64 与 macOS Apple 芯片 
 
 ## 下载
 
-**[Windows 2.0 测试版（x64）](https://github.com/Ye9137/CampusConnect/releases/download/windows-v2.0.0-beta.1/CampusConnect-Windows-x64-2.0.0-beta.1-Setup.exe)** · [测试版详情](Windows/2.0-测试版说明.md)
+**[Windows 2.0 测试版（x64）](https://github.com/Ye9137/CampusConnect/releases/download/windows-v2.0.0-beta.2/CampusConnect-Windows-x64-2.0.0-beta.2-Setup.exe)** · [测试版详情](Windows/2.0-测试版说明.md)
 
 **[Windows 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/v1.5.2/CampusConnect-Windows-x64-1.5.2-Setup.exe)** · **[macOS 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v1.5.2/CampusConnect-macOS-universal-1.5.2.zip)** · [GitHub 发布版本](https://github.com/Ye9137/CampusConnect/releases) · [Gitee 国内下载](https://gitee.com/lyz9137/CampusConnect/releases)
 
