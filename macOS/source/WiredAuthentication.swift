@@ -121,7 +121,7 @@ enum WiredSystem {
             let configuration = NSWorkspace.OpenConfiguration()
             configuration.activates = manual; configuration.createsNewApplicationInstance = false
             NSWorkspace.shared.openApplication(at: url, configuration: configuration) { [weak self] _, error in
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
                     guard let self, self.generation == expected else { return }
                     completion(error.map { .failure($0) } ?? .success("学校客户端已打开，请在客户端完成登录。"))
                 }
@@ -136,7 +136,7 @@ enum WiredSystem {
         process.arguments = ["-connectpppoeservice", profile.broadbandName]
         process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice
         process.terminationHandler = { [weak self] result in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 guard let self, self.generation == expected else { return }
                 self.deadline?.cancel(); self.deadline = nil; self.process = nil
                 completion(result.terminationReason == .exit && result.terminationStatus == 0
