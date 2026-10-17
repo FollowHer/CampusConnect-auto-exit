@@ -5,7 +5,7 @@
 > [!IMPORTANT]
 > **适配范围与交流反馈**
 >
-> 本程序目前已支持 **河南工业职业技术大学**、**郑州信息工程职业学院** 的校园网认证，也欢迎其他学校的同学下载测试。
+> 本程序目前已支持 **河南工业职业技术大学**、**郑州信息工程职业学院**、**无锡职业技术大学** 的校园网认证，也欢迎其他学校的同学下载测试。
 >
 > 如果使用正常，欢迎在 [GitHub Issues](https://github.com/Ye9137/CampusConnect/issues) 中反馈 **学校名称**，帮助更多同学了解适用范围。
 >
@@ -13,9 +13,8 @@
 >
 > **抖音：3325725312q**，或者添加本人 **QQ：3325725312**。欢迎学习交流！
 
-Windows **2.0 测试版（2.0.0-beta.2）** 已开放：[下载测试版](https://github.com/Ye9137/CampusConnect/releases/tag/windows-v2.0.0-beta.2) · [测试说明](Windows/2.0-测试版说明.md)。新增明确的有线 / Wi-Fi 选择、PPPoE、802.1X 和学校客户端入口，以及登录必选框、协议框自动勾选。
+**CampusConnect 2.0.0 正式版**：[下载正式版](https://github.com/Ye9137/CampusConnect/releases/tag/v2.0.0) · [更新说明](2.0-更新说明.md)。Windows 与 macOS 均支持明确的 Wi-Fi / 有线选择、四种有线认证入口、网页必选框自动勾选和左下角问题反馈入口。
 
-Windows 和 macOS 稳定版为 **1.5.2**：新增有线模式，**Wi-Fi 名称留空**即可使用有线网络进行校园网网页认证。Windows 保留 [1.5.1 后台恢复修复](Windows/1.5.1-更新说明.md)。
 [![Build](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml/badge.svg)](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -23,28 +22,19 @@ Windows 和 macOS 稳定版为 **1.5.2**：新增有线模式，**Wi-Fi 名称�
 
 分别为 macOS 和 Windows 制作的桌面校园网连接工具。默认校园 Wi-Fi 为 `HNPI-STU`，认证地址为 `http://192.168.0.123`，可在设置中修改。
 
-## Windows 2.0 测试版
+## 2.0 正式版
 
-Beta 2 在 Windows 界面左下角增加「如果遇到问题请点击：!」入口，点击感叹号展开说明：关注 **3325725312q**，进群反馈。
+Windows 和 macOS 界面左下角提供「如果遇到问题请点击：!」入口，点击感叹号展开说明：关注 **3325725312q**，进群反馈。
 
-本次只更新 Windows。选择「有线网络（以太网）」后，可进一步选择网页认证、PPPoE 宽带拨号、802.1X 系统认证或学校专用客户端。旧版 Wi-Fi 名称留空的配置继续识别为有线模式；修改后需保存才会用于实际连接。有线模式的图标、窗口/托盘标题与提示已统一修正。
+在 Windows 和 macOS 中，选择「有线网络（以太网）」后，可进一步选择网页认证、PPPoE 宽带拨号、802.1X 系统认证或学校专用客户端。旧版 Wi-Fi 名称留空的配置继续识别为有线模式；修改后需保存才会用于实际连接。有线模式的图标、窗口/托盘标题与提示已统一修正。
 
 网页认证会自动勾选可识别的登录必选框和协议项，触发网页原有事件；勾选被拒绝或需要人工确认时停止自动提交。记住密码、推广订阅等可选项保留原状。
 
-PPPoE、802.1X 需先在 Windows 完成相应配置；专用客户端模式负责启动已安装的学校客户端，客户端内登录仍由客户端处理。本测试版的真实校园网络、Windows 原生安装与新认证方式验证范围见 [测试说明](Windows/2.0-测试版说明.md)。
+PPPoE、802.1X 需先在对应操作系统完成相应配置；专用客户端模式负责启动已安装的学校客户端，客户端内登录仍由客户端处理。macOS 的 802.1X 使用系统描述文件与自动连接，手动连接在系统网络设置中完成。平台差异与真实校园网络验证范围见 [更新说明](2.0-更新说明.md)。
 
-![Windows 2.0 测试版有线模式设置](docs/screenshots/windows-2.0-beta-wired-settings.png)
+![Windows 2.0 正式版有线模式设置](docs/screenshots/windows-2.0-wired-settings.png)
 
-![Windows 2.0 测试版 PPPoE 设置](docs/screenshots/windows-2.0-beta-pppoe-settings.png)
-
-## 1.5.2 有线模式
-
-- 在「校园网设置」将 **Wi-Fi 名称清空**，填写认证页面地址、上网账号和密码后保存，即为有线模式；接好网线后点击「立即连接」或开启自动连接。
-- 有线模式无需无线网卡、Wi-Fi 密码或定位授权，不扫描、连接 Wi-Fi；未检测到有线连接时会提示插好网线。
-- 保留自动填写、登录结果校验、断线后按间隔重新认证和暂停功能。认证网址仍须与保存地址的协议、主机和端口匹配。
-- 填回 Wi-Fi 名称即可切回原有模式；原配置不会被自动改成有线模式。
-- macOS 的认证请求在有线模式使用以太网，在 Wi-Fi 模式使用 Wi-Fi。Windows 浏览器和两平台的 ping 使用系统路由，多网卡 / VPN 环境需确保校园认证地址可达。
-- 构建和自动化回归不代表学校有线网络已实测通过；真实有线认证、USB 网卡和拔插恢复仍需在校园网络验证。
+![Windows 2.0 正式版 PPPoE 设置](docs/screenshots/windows-2.0-pppoe-settings.png)
 
 ## 1.5.0 正式版
 
@@ -58,13 +48,11 @@ ping 使用系统路由，可能经过 VPN。Windows x64 与 macOS Apple 芯片 
 
 ## 下载
 
-**[Windows 2.0 测试版（x64）](https://github.com/Ye9137/CampusConnect/releases/download/windows-v2.0.0-beta.2/CampusConnect-Windows-x64-2.0.0-beta.2-Setup.exe)** · [测试版详情](Windows/2.0-测试版说明.md)
+**[Windows 2.0.0 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/v2.0.0/CampusConnect-Windows-x64-2.0.0-Setup.exe)** · **[macOS 2.0.0 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v2.0.0/CampusConnect-macOS-universal-2.0.0.zip)** · [源码与校验文件](https://github.com/Ye9137/CampusConnect/releases/tag/v2.0.0)
 
-**[Windows 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/v1.5.2/CampusConnect-Windows-x64-1.5.2-Setup.exe)** · **[macOS 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v1.5.2/CampusConnect-macOS-universal-1.5.2.zip)** · [GitHub 发布版本](https://github.com/Ye9137/CampusConnect/releases) · [Gitee 国内下载](https://gitee.com/lyz9137/CampusConnect/releases)
+## 2.0 正式版界面预览
 
-## 1.5.2 稳定版界面预览
-
-以下为 Windows 1.5.2 界面预览，使用当前版本的内置界面离线生成，展示未连接状态；账号、密码均为空。实际学校认证页面会在连接校园网后加载。
+以下为 Windows 2.0.0 界面预览，使用内置界面离线生成，展示未连接状态；账号、密码均为空。实际学校认证页面会在连接校园网后加载。
 
 ### 网络概览
 
@@ -86,7 +74,7 @@ ping 使用系统路由，可能经过 VPN。Windows x64 与 macOS Apple 芯片 
 
 ### 有线模式
 
-在「校园网设置」清空 Wi-Fi 名称，填写认证地址和上网账号密码后保存。无需 Wi-Fi 密码或定位授权；接好网线后点击「立即连接」，也可开启自动连接。
+在「校园网设置」选择「有线网络（以太网）」和对应认证方式后保存。无需填写 Wi-Fi 名称或定位授权；网页认证填写学校认证信息，系统认证先完成相应系统配置。
 
 ![Windows 有线模式设置](docs/screenshots/windows-wired-settings.png)
 

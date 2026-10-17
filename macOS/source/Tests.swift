@@ -118,6 +118,7 @@ import JavaScriptCore
         expect(WiredSystem.select(name: "missing", from: [other, noIP]) == nil, "missing selected adapter never falls back")
         expect(WiredSystem.select(name: "", from: [noIP, other]) == noIP, "automatic adapter selection does not require IP")
         expect(WiredSystem.select(name: "", from: []) == nil, "no Ethernet never falls back to Wi-Fi")
+        invalidWired.ethernetName = "campus-missing-interface-test"
         expect(!WiredSystem.connected(invalidWired), "missing configured system connection cannot be authenticated")
         expect(PortalFillRetry.shouldRetry(result: "waiting-agreement", scriptFailed: false, attempt: 1), "asynchronous checkbox retries")
         expect(!PortalFillRetry.shouldRetry(result: "agreement-required", scriptFailed: false, attempt: 1), "rejected checkbox requires manual action")
