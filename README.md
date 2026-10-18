@@ -5,13 +5,13 @@
 > [!IMPORTANT]
 > **适配范围与交流反馈**
 >
-> 本程序目前已支持 **河南工业职业技术大学**、**郑州信息工程职业学院**、**无锡职业技术大学**、**天津石油职业技术学院**、**华东交通大学** 的校园网认证，也欢迎其他学校的同学下载测试。
+> 本程序目前已支持 **河南工业职业技术大学**、**郑州信息工程职业学院**、**无锡职业技术大学**、**天津石油职业技术学院**、**华东交通大学**、**南通大学** 的校园网认证，也欢迎其他学校的同学下载测试。
 >
-> 如果使用正常，欢迎在 [GitHub Issues](https://github.com/Ye9137/CampusConnect/issues) 中反馈 **学校名称**，帮助更多同学了解适用范围。
+> 如果使用正常，也欢迎通过程序左下角的感叹号查看作者抖音，关注并发送你的大学名称，帮助更多小伙伴使用小助手。也可以在 [GitHub Issues](https://github.com/Ye9137/CampusConnect/issues) 中反馈 **学校名称**，帮助更多同学了解适用范围。
 >
 > 使用中如遇到连接或认证问题，请点击 **程序左下角的感叹号**，查看联系方式并联系作者。反馈时请提供 **学校名称** 和 **连接失败的完整视频**，方便排查问题、持续完善适配。
 
-**Windows 2.0.2**：[下载安装包](https://github.com/Ye9137/CampusConnect/releases/tag/v2.0.2) · [更新说明](Windows/2.0.2-更新说明.md)。新增动态运营商菜单、顶部单选项与自定义服务名称选择，选中后再提交登录。macOS 当前正式版为 [2.0.0](https://github.com/Ye9137/CampusConnect/releases/tag/v2.0.0)。
+**Windows 2.0.3 修订正式版**：[下载安装包](https://github.com/Ye9137/CampusConnect/releases/tag/v2.0.3) · [更新说明](Windows/2.0.3-更新说明.md)。修复运营商文字标签识别，补充抖音关注与大学名称反馈提示，新增南通大学支持说明。macOS 当前正式版为 [2.0.0](https://github.com/Ye9137/CampusConnect/releases/tag/v2.0.0)。
 
 [![Build](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml/badge.svg)](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -19,6 +19,14 @@
 由 [Ye9137](https://github.com/Ye9137) 维护，使用 MIT 许可证开源。
 
 分别为 macOS 和 Windows 制作的桌面校园网连接工具。默认校园 Wi-Fi 为 `HNPI-STU`，认证地址为 `http://192.168.0.123`，可在设置中修改。
+
+## Windows 2.0.3 修订正式版
+
+- **修复运营商文字识别**：支持单选框旁的 `font` 文字标签及其间的空白、注释，确认选中后再提交登录。
+- **补充正常使用反馈提示**：左下角感叹号新增关注抖音并发送大学名称的说明，帮助更多同学使用小助手。
+- **新增南通大学支持说明**。
+
+下载与验证范围见 [2.0.3 更新说明](Windows/2.0.3-更新说明.md)。
 
 ## Windows 2.0.2 新增功能
 
@@ -53,7 +61,7 @@
 - **改进系统认证的自动重试与暂停**：首次满足条件时发起认证，设置超时及至少 60 秒的重试间隔；暂停或保存切换后的模式时取消待处理尝试。结合连接状态和联网检测显示结果，不将命令执行完毕直接视为认证成功。
 - **修复 Windows 长时间后台运行后重新打开窗口可能白屏的问题**：恢复界面时保留当前页面、未保存的设置、密码及高级设置展开状态，草稿仅在内存中保存；正常界面刷新不重复启动自动连接或重载学校认证页。
 - **完善升级兼容与跨平台构建检查**：保留已有账号及配置，补充模式保存恢复、协议勾选、网卡选择、重试暂停和界面恢复回归；完善 Windows x64 / ARM64 原生安装检查，修正中文快捷方式路径的测试处理及测试换行兼容，并修正 macOS 在不同 Swift 工具链下的异步回调编译兼容问题。
-- **更新教程、截图与学校反馈说明**：补充有线模式和 PPPoE 设置预览，统一正式版下载入口；支持名单现列明河南工业职业技术大学、郑州信息工程职业学院、无锡职业技术大学、天津石油职业技术学院、华东交通大学。其他学校测试正常后，欢迎在 [GitHub Issues](https://github.com/Ye9137/CampusConnect/issues) 中反馈学校名称；遇到问题可通过程序左下角感叹号联系作者，并提供学校名称和完整失败视频。
+- **更新教程、截图与学校反馈说明**：补充有线模式和 PPPoE 设置预览，统一正式版下载入口；支持名单现列明河南工业职业技术大学、郑州信息工程职业学院、无锡职业技术大学、天津石油职业技术学院、华东交通大学、南通大学。其他学校测试正常后，欢迎在 [GitHub Issues](https://github.com/Ye9137/CampusConnect/issues) 中反馈学校名称；遇到问题可通过程序左下角感叹号联系作者，并提供学校名称和完整失败视频。
 
 ### 继续保留的 1.5 功能
 
@@ -77,7 +85,7 @@ ping 使用系统路由，可能经过 VPN。Windows x64 与 macOS Apple 芯片 
 
 ## 下载
 
-**[Windows 2.0.2 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/v2.0.2/CampusConnect-Windows-x64-2.0.2-Setup.exe)** · **[macOS 2.0.0 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v2.0.0/CampusConnect-macOS-universal-2.0.0.zip)** · [Windows 2.0.2 源码与校验文件](https://github.com/Ye9137/CampusConnect/releases/tag/v2.0.2)
+**[Windows 2.0.3 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/v2.0.3/CampusConnect-Windows-x64-2.0.3-Setup.exe)** · **[macOS 2.0.0 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v2.0.0/CampusConnect-macOS-universal-2.0.0.zip)** · [Windows 2.0.3 源码与校验文件](https://github.com/Ye9137/CampusConnect/releases/tag/v2.0.3)
 
 ## 2.0 正式版界面预览
 

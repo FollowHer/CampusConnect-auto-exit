@@ -290,6 +290,31 @@ document.getElementById('loginLink').onclick = () => clicks++;
     await loadRadios(radioPage.replaceAll('<label>','').replaceAll('</label>',''));
     assert.equal(await page.evaluate(script({serviceOption:'中国移动'})), 'submitted');
     assert.equal(await page.evaluate(()=>selectionAtSubmit),'1');
+    // Combine the supplied localized FONT markup with a radio to cover discovery.
+    const fontRadioPage = radioPage.replace(/<label>(<input[^>]+>)([^<]+)<\/label>/g,
+      (_,input,name)=>`${input}\n<!-- localized operator -->\n<font style="padding-left:18px;" data-localize="pc.17522208445411">${name}</font>`);
+    for (const [index,name] of radioNames.entries()) {
+      await loadRadios(fontRadioPage);
+      assert.equal(await page.evaluate(script({serviceOption:name})), 'submitted');
+      assert.equal(await page.evaluate(()=>selectionAtSubmit),String(index));
+      assert.deepEqual(await page.evaluate(()=>operatorEvents),index===0?[]:[String(index)]);
+    }
+    // Exact supplied SPAN/input[name=network][value=@cmcc]/FONT fragment.
+    const cmccPage = fs.readFileSync(path.join(__dirname,'fixtures/cmcc-font-radio.html'),'utf8');
+    await reset(); await page.setContent(cmccPage);
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动',confirmSubmit:true})), 'submitted');
+    assert.equal(await page.locator('[name=network]:checked').inputValue(),'@cmcc');
+    assert.equal(await page.evaluate(()=>selectionAtSubmit),'@cmcc');
+    assert.deepEqual(await page.evaluate(()=>operatorEvents),['click','input','change']);
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动',confirmSubmit:true})), 'already-submitted');
+    assert.equal(await page.evaluate(()=>clicks),1);
+    await reset(); await page.setContent(cmccPage);
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动',submit:false,confirmSubmit:true})), 'filled');
+    assert.equal(await page.locator('[name=network]:checked').inputValue(),'@cmcc');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    // Rechecking a filled form must not fire the operator handler twice.
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动',submit:false,confirmSubmit:true})), 'filled');
+    assert.deepEqual(await page.evaluate(()=>operatorEvents),['click','input','change']);
     await loadRadios(radioPage.replaceAll('type="radio"','type="radio" style="display:none"'));
     assert.equal(await page.evaluate(script({serviceOption:'中国联通'})), 'submitted');
     assert.equal(await page.evaluate(()=>selectionAtSubmit),'3');
@@ -439,6 +464,6 @@ document.getElementById('loginLink').onclick = () => clicks++;
     await page.goto('http://portal.test/eportal/success.jsp?userIndex=fixture');
     assert.equal(await page.evaluate(confirmed({statusOnly:true})),'authenticated');
     assert.equal(await page.evaluate(confirmed({statusOnly:true,origin:'http://other.test'})),'wrong-origin');
-    console.log('PASS: Windows top-of-page native/hidden/accessible radios, arbitrary operator names, school change handlers, delayed selection, native/custom menus, open-before-load, selection before submission, other-form isolation, missing/disabled/ambiguous/rejected options, credential fields, origin and submission deduplication.');
+    console.log('PASS: FONT operator labels with whitespace/comments, Windows top-of-page native/hidden/accessible radios, arbitrary operator names, school change handlers, delayed selection, native/custom menus, open-before-load, selection before submission, other-form isolation, missing/disabled/ambiguous/rejected options, credential fields, origin and submission deduplication.');
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

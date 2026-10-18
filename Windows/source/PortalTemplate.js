@@ -128,13 +128,13 @@
         if (!visible(control) && !labels.some(visible)) return false;
         const names = [control.getAttribute('aria-label'), ...labels.map(label => label.textContent)];
         if (control.getAttribute('role') === 'radio') names.push(control.textContent);
-        // Older pages use bare text or a span immediately after each input.
+        // Older pages use bare text or FONT/SPAN text after each input.
+        // Localization comments and indentation can sit between the two.
         let sibling = control.nextSibling;
-        if (sibling?.nodeType === 3) {
-          if (normalized(sibling.textContent)) names.push(sibling.textContent);
-          else sibling = sibling.nextSibling;
-        }
-        if (sibling?.nodeType === 1 && sibling.matches('span,label') &&
+        while (sibling && (sibling.nodeType === 8 ||
+            (sibling.nodeType === 3 && !normalized(sibling.textContent)))) sibling = sibling.nextSibling;
+        if (sibling?.nodeType === 3) names.push(sibling.textContent);
+        if (sibling?.nodeType === 1 && sibling.matches('font,span,label') &&
             !sibling.querySelector('input,button,[role="radio"]')) names.push(sibling.textContent);
         return names.some(name => normalized(name) === serviceName);
       });

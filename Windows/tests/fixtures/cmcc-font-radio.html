@@ -1,0 +1,22 @@
+<!doctype html>
+<meta charset="utf-8">
+<!-- Supplied operator fragment; the surrounding page and credentials are synthetic. -->
+<span><input name="network" type="radio" value="campus-test" checked><font>校园网</font></span>
+<span>
+<input class="edit_lobo_cell" name="network" type="radio" value="@cmcc" style="color: rgb(51, 51, 51); background-color: rgba(0, 0, 0, 0); border-color: rgb(51, 51, 51); --darkreader-inline-color: var(--darkreader-text-333333, #c8c3bc); --darkreader-inline-bgcolor: var(--darkreader-background-00000000, rgba(24, 26, 27, 0)); --darkreader-inline-border-top: var(--darkreader-border-333333, #7b7265); --darkreader-inline-border-right: var(--darkreader-border-333333, #7b7265); --darkreader-inline-border-bottom: var(--darkreader-border-333333, #7b7265); --darkreader-inline-border-left: var(--darkreader-border-333333, #7b7265);" data-darkreader-inline-color="" data-darkreader-inline-bgcolor="" data-darkreader-inline-border-top="" data-darkreader-inline-border-right="" data-darkreader-inline-border-bottom="" data-darkreader-inline-border-left="">
+<font style="padding-left:18px;" data-localize="pc.17522208445411">中国移动</font>
+"&nbsp;&nbsp;"
+</span>
+<form>
+  <input name="username" autocomplete="off">
+  <input type="password" autocomplete="off">
+  <button type="button" onclick="window.selectionAtSubmit=document.querySelector('[name=network]:checked').value;window.clicks++">登录</button>
+</form>
+<script>
+window.clicks = 0;
+window.operatorEvents = [];
+const mobile = document.querySelector('[name=network][value="@cmcc"]');
+for (const type of ['click', 'input', 'change']) {
+  mobile.addEventListener(type, () => operatorEvents.push(type));
+}
+</script>

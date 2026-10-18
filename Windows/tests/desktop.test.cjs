@@ -148,6 +148,18 @@ const { pathToFileURL } = require('node:url');
     assert(firstPosition>nextPosition && nextPosition>0,'The visible page must actually move across frames.');
     await page.waitForFunction(()=>document.querySelectorAll('.page:not([hidden])').length===1);
     assert.equal(await page.locator('.toggle').first().evaluate(e=>getComputedStyle(e).transitionDuration),'0s');
+    // The longer feedback note must open and fit in the minimum-size window.
+    for (const colorScheme of ['light','dark']) {
+      await page.emulateMedia({colorScheme});
+      await page.locator('.feedback-help > summary').click();
+      assert.equal(await page.locator('.feedback-note').isVisible(),true);
+      const note=await page.locator('.feedback-note').textContent();
+      assert(note.includes('如果使用正常') && note.includes('关注我的抖音') && note.includes('大学名称') && note.includes('帮助更多小伙伴使用小助手'));
+      const rect=await page.locator('.feedback-note').boundingBox();
+      assert(rect.x>=0 && rect.y>=0 && rect.x+rect.width<=980 && rect.y+rect.height<=700,'Feedback note clipped at minimum size.');
+      await page.screenshot({animations:'disabled',path:path.join(output,'feedback-'+colorScheme+'.png')});
+      await page.locator('.feedback-help > summary').click();
+    }
     assert.deepEqual(errors,[]);
     console.log('PASS: hover navigation, draft retention, immediate hover, rapid switches, forced slide motion with reduced system motion, three pages, startup success/failure, attribution, settings actions, unsaved drafts, native bounds, text injection, minimum size and dark mode.');
   } finally {await browser.close();}
