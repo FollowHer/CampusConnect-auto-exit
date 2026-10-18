@@ -41,11 +41,11 @@ import WebKit
         checks += 1
         if !value { throw AppError.message(message) }
     }
-    func load() async throws {
+    func load(html: String? = nil) async throws {
         view.navigationDelegate = self
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             navigation = continuation
-            view.loadHTMLString(fixture, baseURL: URL(string: "http://portal.test/eportal/index.jsp"))
+            view.loadHTMLString(html ?? fixture, baseURL: URL(string: "http://portal.test/eportal/index.jsp"))
         }
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -76,6 +76,46 @@ import WebKit
         return result
     }
     func run() async throws {
+        let source = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let cmcc = try String(contentsOf: source.appendingPathComponent("../../Windows/tests/fixtures/cmcc-font-radio.html"), encoding: .utf8)
+        try await load(html: cmcc)
+        try expect(try await fill(service: "中国移动") == "submitted", "FONT-labelled operator submits")
+        try expect(try await js("document.querySelector('[name=network]:checked').value") as? String == "@cmcc", "actual operator fragment selects cmcc")
+        try expect(try await js("selectionAtSubmit") as? String == "@cmcc", "operator selected before login")
+        try expect(try await js("JSON.stringify(operatorEvents)") as? String == "[\"click\",\"input\",\"change\"]", "school radio events preserved")
+        try expect(try await fill(service: "中国移动") == "already-submitted", "operator login deduplicated")
+        try expect(try await js("clicks") as? Int == 1, "one login for FONT operator")
+        try await load(html: cmcc)
+        try expect(try await fill(submit: false, service: "中国移动") == "filled", "manual submit still selects operator")
+        try expect(try await js("clicks") as? Int == 0, "manual operator selection does not log in")
+        try expect(try await fill(submit: false, service: "中国移动") == "filled", "selected radio not clicked repeatedly")
+        try expect(try await js("operatorEvents.length") as? Int == 3, "one sequence of radio events")
+        let native = """
+        <form><input name="username"><input type="password"><button type="button" onclick="window.clicks++">登录</button></form>
+        <select id="operator"><option value="">选择运营商</option><option value="cmcc">中国移动</option><option value="custom">校园专线 A</option></select>
+        <script>window.clicks=0</script>
+        """
+        try await load(html: native)
+        try expect(try await fill() == "service-required", "placeholder without configured operator requires input")
+        try expect(try await js("clicks") as? Int == 0, "placeholder never submits")
+        try expect(try await fill(service: "校园专线 A") == "submitted", "custom service outside login form selected")
+        try expect(try await js("document.getElementById('operator').value") as? String == "custom", "custom option confirmed")
+        let lazy = """
+        <form><input name="username"><input type="password"><button type="button" onclick="window.clicks++">登录</button></form>
+        <button role="combobox" id="choose" aria-controls="operator-options" aria-expanded="false">选择运营商</button>
+        <script>
+        window.clicks=0;window.opens=0;
+        document.getElementById('choose').onclick=function(){opens++;this.setAttribute('aria-expanded','true')};
+        window.populate=function(){document.body.insertAdjacentHTML('beforeend','<ul role="listbox" id="operator-options"><li role="option">校园专线 A</li></ul>');document.querySelector('[role=option]').onclick=function(){document.getElementById('choose').textContent=this.textContent;document.getElementById('operator-options').hidden=true}};
+        </script>
+        """
+        try await load(html: lazy)
+        try expect(try await fill(service: "校园专线 A") == "missing-service", "open menu before delayed choices")
+        try expect(try await fill(service: "校园专线 A") == "missing-service", "wait without toggling menu")
+        try expect(try await js("opens") as? Int == 1, "dynamic menu opens once")
+        try await js("populate();true")
+        try expect(try await fill(service: "校园专线 A") == "submitted", "late custom choice resumes login")
+        try expect(try await js("clicks") as? Int == 1, "dynamic choice logs in once")
         try await load()
         // Simulate a first programmatic click that never reaches the school's handler.
         try await js("document.getElementById('loginLink').click=()=>{}; true")

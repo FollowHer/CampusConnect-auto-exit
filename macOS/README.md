@@ -1,5 +1,13 @@
 # macOS 版
 
+## 2.0.3 修订正式版
+
+[下载 macOS 2.0.3 通用版（Apple 芯片 / Intel）](https://github.com/Ye9137/CampusConnect/releases/tag/macos-v2.0.3) · [更新说明](2.0.3-更新说明.md)
+
+同步 Windows 2.0.3 的运营商选择功能：标准下拉框、顶部单选项、`font` 文字标签和延迟动态菜单均按设置中的完整名称处理，确认选中后再登录。设置项更新为“运营商 / 服务选项”。左下角感叹号新增正常使用后关注抖音、发送大学名称的反馈提示。
+
+当前支持学校名单包含河南工业职业技术大学、郑州信息工程职业学院、无锡职业技术大学、天津石油职业技术学院、华东交通大学和南通大学。真实校园网认证仍需在对应学校网络确认。
+
 ## 2.0 正式版（2.0.0）
 
 - 在「校园网设置」明确选择 Wi-Fi 或有线网络；有线无需填写 Wi-Fi 名称。旧版空名称配置继续按有线网页认证处理，修改后保存才会生效。
@@ -61,7 +69,7 @@
 
 ## 安装与使用
 
-1. 下载并解压 `CampusConnect-macOS-universal-2.0.0.zip`。
+1. 下载并解压 `CampusConnect-macOS-universal-2.0.3.zip`。
 2. 将 `CampusConnect.app` 拖到「应用程序」，双击打开。
 3. 此包使用本地临时签名，未经过 Apple Developer ID 签名和公证。若系统拦截，请确认下载来源后，在「系统设置 → 隐私与安全性」中允许打开。
 4. 在应用「网络概览」点击授权定位，允许读取 Wi-Fi 名称。
@@ -86,4 +94,4 @@ codesign --verify --deep --strict macOS/CampusConnect.app
 lipo -archs macOS/CampusConnect.app/Contents/MacOS/CampusConnect
 ```
 
-应用内部认证连接可绑定物理 Wi-Fi，适用于部分 VPN 干扰校园认证的情况。并不修改系统 VPN 配置。不同学校的验证码、运营商选择等页面需手动处理。
+应用内部认证连接可绑定物理 Wi-Fi，适用于部分 VPN 干扰校园认证的情况。并不修改系统 VPN 配置。验证码、额外运营商账号及未识别的特殊控件仍需手动处理。

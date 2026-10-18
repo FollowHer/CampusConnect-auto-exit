@@ -15,6 +15,7 @@ for folder in ("macOS/source", "Windows/source", "Windows/tests", "Windows/insta
                 files.append(path)
 files += [root / path for path in ("macOS/README.md", "macOS/test.sh", "macOS/test-webkit.sh", "Windows/README.md", "Windows/1.5.1-更新说明.md", "Windows/2.0-更新说明.md", "Windows/build.ps1", "Windows/build-installer.ps1")]
 files += [root / path for path in ("Windows/2.0.1-更新说明.md", "Windows/2.0.2-更新说明.md", "Windows/2.0.3-更新说明.md")]
+files.append(root / "macOS/2.0.3-更新说明.md")
 files += sorted((root / "docs" / "screenshots").glob("*.png"))
 with ZipFile(output, "w", ZIP_DEFLATED) as archive:
     for path in sorted(set(files)):

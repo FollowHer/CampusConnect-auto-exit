@@ -220,6 +220,7 @@ final class PortalController: NSObject, ObservableObject, WKNavigationDelegate {
                 case "filled": self.requiresInteraction = true; self.filled = true; self.password = ""; self.message = "账号密码已填写，请在页面点击登录。"
                 case "missing-submit": self.requiresInteraction = true; self.filled = true; self.password = ""; self.message = "账号密码已填写，未识别登录按钮，请手动点击或设置按钮选择器。"
                 case "missing-service": self.requiresInteraction = true; self.filled = true; self.password = ""; self.message = "未找到或未能选中填写的服务选项，请检查完整名称或在网页中手动选择。网页没有选项时，请清空设置中的服务选项。"
+                case "service-required": self.requiresInteraction = true; self.filled = true; self.password = ""; self.message = "认证页尚未选择运营商或服务。请在设置的“运营商 / 服务选项”中填写网页上的完整名称（如中国移动），保存后重新认证；也可在网页中手动选择并登录。"
                 case "waiting-agreement", "agreement-required": self.requiresInteraction = true; self.filled = true; self.password = ""; self.message = "网页必选框或协议项无法自动确认，请在页面手动勾选后登录。"
                 case "manual-required": self.requiresInteraction = true; self.filled = true; self.password = ""; self.message = "学校要求验证码或运营商信息，请在认证页补充。"
                 case "waiting-submit", "submission-unconfirmed":

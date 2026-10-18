@@ -450,7 +450,7 @@ struct RootView: View {
                     .buttonStyle(.plain)
                     .help("查看问题反馈方式")
                     .popover(isPresented: $model.showingFeedback, arrowEdge: .bottom) {
-                        (Text("使用中如有任何问题，请关注抖音 ") + Text("3325725312q").fontWeight(.semibold) + Text("，进群反馈。"))
+                        (Text("使用中如有任何问题，请关注抖音 ") + Text("3325725312q").fontWeight(.semibold) + Text("，进群反馈。\n\n如果使用正常，也欢迎关注我的抖音，并发送你的大学名称，帮助更多小伙伴使用小助手。"))
                             .font(.system(size: 12)).lineSpacing(4).textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true).padding(16).frame(width: 270)
                     }
@@ -498,7 +498,7 @@ struct RootView: View {
                         Text(model.status).font(.system(size: 11)).lineLimit(2)
                     }
                     Spacer()
-                    Text("v2.0.0 · macOS").font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text("v2.0.3 · macOS").font(.system(size: 10)).foregroundStyle(.secondary)
                 }.padding(.horizontal, 24).padding(.vertical, 12)
             }.background(Color(nsColor: .textBackgroundColor))
         }.frame(minWidth: 980, minHeight: 700).tint(accent).textSelection(.disabled)
@@ -677,8 +677,8 @@ struct RootView: View {
                                     SecureField("输入上网密码", text: $model.portalPassword).textFieldStyle(.roundedBorder)
                                 }
                             }
-                            field("服务选项（可留空）", text: $model.draft.serviceOption, prompt: "例如：联通接入服务")
-                            Text("填写认证网页中要选择的完整名称；网页没有服务选项时留空。留空时不自动选择，沿用网页默认状态。")
+                            field("运营商 / 服务选项", text: $model.draft.serviceOption, prompt: "例如：中国移动 或 联通接入服务")
+                            Text("填写认证网页中的完整选项名称，例如中国移动、中国联通、中国电信或联通接入服务。网页需要选择运营商时请填写，保存后重新认证；网页没有此选项时留空。")
                                 .font(.system(size: 11)).foregroundStyle(.secondary)
                             Toggle("自动填写后点击登录", isOn: $model.draft.autoSubmit)
                             DisclosureGroup("网页认证高级设置 · 特殊认证页面") {

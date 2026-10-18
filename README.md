@@ -11,7 +11,7 @@
 >
 > 使用中如遇到连接或认证问题，请点击 **程序左下角的感叹号**，查看联系方式并联系作者。反馈时请提供 **学校名称** 和 **连接失败的完整视频**，方便排查问题、持续完善适配。
 
-**Windows 2.0.3 修订正式版**：[下载安装包](https://github.com/Ye9137/CampusConnect/releases/tag/v2.0.3) · [更新说明](Windows/2.0.3-更新说明.md)。修复运营商文字标签识别，补充抖音关注与大学名称反馈提示，新增南通大学支持说明。macOS 当前正式版为 [2.0.0](https://github.com/Ye9137/CampusConnect/releases/tag/v2.0.0)。
+**Windows 2.0.3 修订正式版**：[下载安装包](https://github.com/Ye9137/CampusConnect/releases/tag/v2.0.3) · [更新说明](Windows/2.0.3-更新说明.md)。修复运营商文字标签识别，补充抖音关注与大学名称反馈提示，新增南通大学支持说明。**[macOS 2.0.3 通用版](https://github.com/Ye9137/CampusConnect/releases/tag/macos-v2.0.3)** 同步运营商选择和反馈提示，支持 Apple 芯片与 Intel。
 
 [![Build](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml/badge.svg)](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -19,6 +19,10 @@
 由 [Ye9137](https://github.com/Ye9137) 维护，使用 MIT 许可证开源。
 
 分别为 macOS 和 Windows 制作的桌面校园网连接工具。默认校园 Wi-Fi 为 `HNPI-STU`，认证地址为 `http://192.168.0.123`，可在设置中修改。
+
+## macOS 2.0.3 同步更新
+
+macOS 已同步标准下拉框、顶部单选项、`font` 文字标签和延迟动态菜单的识别；左下角感叹号同步新增抖音关注与大学名称反馈提示。详见 [macOS 2.0.3 更新说明](macOS/2.0.3-更新说明.md)。
 
 ## Windows 2.0.3 修订正式版
 
@@ -85,7 +89,7 @@ ping 使用系统路由，可能经过 VPN。Windows x64 与 macOS Apple 芯片 
 
 ## 下载
 
-**[Windows 2.0.3 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/v2.0.3/CampusConnect-Windows-x64-2.0.3-Setup.exe)** · **[macOS 2.0.0 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v2.0.0/CampusConnect-macOS-universal-2.0.0.zip)** · [Windows 2.0.3 源码与校验文件](https://github.com/Ye9137/CampusConnect/releases/tag/v2.0.3)
+**[Windows 2.0.3 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/v2.0.3/CampusConnect-Windows-x64-2.0.3-Setup.exe)** · **[macOS 2.0.3 通用版](https://github.com/Ye9137/CampusConnect/releases/download/macos-v2.0.3/CampusConnect-macOS-universal-2.0.3.zip)** · [Windows 2.0.3 源码与校验文件](https://github.com/Ye9137/CampusConnect/releases/tag/v2.0.3)
 
 ## 2.0 正式版界面预览
 
