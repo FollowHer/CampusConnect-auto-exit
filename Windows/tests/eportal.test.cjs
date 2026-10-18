@@ -4,14 +4,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const template = fs.readFileSync(path.join(__dirname, '../source/PortalTemplate.js'), 'utf8').replace(/\r\n/g, '\n');
-// Verify the Mac embedded script stays identical, including regex escaping.
+// Windows service selection can evolve independently of the macOS portal script.
 const core = fs.readFileSync(path.join(__dirname, '../../macOS/source/Core.swift'), 'utf8').replace(/\r\n/g, '\n');
-const macScript = core.slice(core.indexOf('        (() => {'), core.indexOf('        """', core.indexOf('        (() => {')))
-  .split('\n').map(line => line.startsWith('        ') ? line.slice(8) : line).join('\n')
-  .replace('\\(json)', '/*CAMPUS_CONFIG*/').replaceAll('\\\\', '\\');
-// Both platforms share credential and service selection behavior.
-// Credential flow and the agreement hook are shared by both platforms.
-assert.equal(macScript, template);
+// The agreement hook remains shared by both platforms.
 const macAgreements = core.split('static let agreementScript = #"""\n')[1].split('    """#')[0].split('\n').map(line => line.startsWith('    ') ? line.slice(4) : line).join('\n');
 assert.equal(macAgreements.trimEnd(), fs.readFileSync(path.join(__dirname, '../source/PortalAgreements.js'), 'utf8').replace(/\r\n/g, '\n').trimEnd());
 const cfg = {origin:'http://portal.test', username:'test-account\'"', password:'test-password\'"',
@@ -129,8 +124,12 @@ document.getElementById('loginLink').onclick = () => clicks++;
     assert.deepEqual(await page.evaluate(()=>serviceEvents),['input','change']);
     assert.equal(await page.evaluate(()=>clicks),1);
     await reset(); await page.setContent(nativeService);
-    assert.equal(await page.evaluate(script({serviceOption:''})), 'submitted');
+    assert.equal(await page.evaluate(script({serviceOption:''})), 'service-required');
     assert.equal(await page.locator('#service').inputValue(),'');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    // Keep an existing valid selection when no service was configured.
+    await page.selectOption('#service','mobile');
+    assert.equal(await page.evaluate(script({serviceOption:''})), 'submitted');
     await reset(); await page.setContent(nativeService);
     assert.equal(await page.evaluate(script({serviceOption:'联通'})), 'missing-service');
     assert.equal(await page.evaluate(()=>clicks),0);
@@ -150,6 +149,204 @@ document.getElementById('loginLink').onclick = () => clicks++;
     assert.equal(await page.evaluate(script({serviceOption:'联通接入服务',submit:false})), 'filled');
     assert.equal(await page.locator('#service').inputValue(),'unicom');
     assert.equal(await page.evaluate(()=>clicks),0);
+    // Screenshot regression: operator select is a sibling of the login form.
+    const operatorPage = `<form id="login"><input name="username"><input type="password">
+      <button type="button" onclick="window.selectionAtSubmit=document.querySelector('#operator').value;window.clicks++">登录</button></form>
+      <select id="operator"><option value="">选择运营商</option><option value="cmcc">中国移动</option>
+      <option value="unicom">中国联通</option><option value="telecom">中国电信</option></select>`;
+    for (const [serviceOption, value] of [['中国移动','cmcc'],['中国联通','unicom'],['中国电信','telecom']]) {
+      await reset(); await page.setContent(operatorPage);
+      await page.evaluate(() => {window.serviceEvents=[];document.querySelector('#operator').onchange=()=>serviceEvents.push('change');});
+      assert.equal(await page.evaluate(script({serviceOption})), 'submitted');
+      assert.equal(await page.locator('#operator').inputValue(),value);
+      assert.equal(await page.evaluate(()=>selectionAtSubmit),value);
+      assert.deepEqual(await page.evaluate(()=>serviceEvents),['change']);
+      assert.equal(await page.evaluate(script({serviceOption})), 'already-submitted');
+      assert.equal(await page.evaluate(()=>clicks),1);
+    }
+    await reset(); await page.setContent(operatorPage);
+    assert.equal(await page.evaluate(script({serviceOption:''})), 'service-required');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    assert.equal(await page.locator('#operator').inputValue(),'');
+    assert.equal(await page.evaluate(script({serviceOption:'中国电信',submit:false})), 'filled');
+    assert.equal(await page.locator('#operator').inputValue(),'telecom');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    // Other forms and hidden/disabled operator controls cannot supply a match.
+    await reset(); await page.setContent(operatorPage.replace('<select id="operator">','<form id="other"><select id="operator">')+'</form>');
+    assert.equal(await page.evaluate(script({serviceOption:'中国联通'})), 'missing-service');
+    assert.equal(await page.locator('#operator').inputValue(),'');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    for (const attribute of ['hidden','disabled']) {
+      await reset(); await page.setContent(operatorPage.replace('<select id="operator">',`<select id="operator" ${attribute}>`));
+      assert.equal(await page.evaluate(script({serviceOption:'中国联通'})), 'missing-service');
+      assert.equal(await page.evaluate(()=>clicks),0);
+    }
+    await reset(); await page.setContent(operatorPage);
+    await page.locator('#operator').evaluate(e=>e.onchange=()=>{e.value='';});
+    assert.equal(await page.evaluate(script({serviceOption:'中国联通'})), 'missing-service');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    // The list does not exist until the opener is clicked; names are unrestricted.
+    const customOperator = async (lazy=false) => {
+      await reset();
+      await page.setContent(`<form><input name="username"><input type="password"><button type="button" onclick="window.clicks++">登录</button></form>
+        <button id="choose" role="combobox" aria-expanded="false" aria-controls="operator-options">选择运营商</button>`);
+      await page.evaluate(lazy => {
+        window.opens=0; window.selectedService='';
+        const opener=document.getElementById('choose');
+        window.loadOperators=()=>{
+          document.getElementById('operator-options')?.remove();
+          document.body.insertAdjacentHTML('beforeend','<ul id="operator-options" role="listbox"></ul>');
+          const popup=document.getElementById('operator-options');
+          for (const name of ['中国移动','中国联通','中国电信','校园专线 A']) {
+            const option=document.createElement('li');option.setAttribute('role','option');option.textContent=name;
+            option.onclick=()=>{opener.textContent=name;opener.setAttribute('aria-expanded','false');popup.hidden=true;window.selectedService=name;};
+            popup.append(option);
+          }
+        };
+        opener.onclick=()=>{opens++;opener.setAttribute('aria-expanded','true');if(!lazy)loadOperators();};
+      },lazy);
+    };
+    for (const name of ['中国移动','中国联通','中国电信','校园专线 A']) {
+      await customOperator();
+      assert.equal(await page.locator('[role=option]').count(),0);
+      assert.equal(await page.evaluate(script({serviceOption:name})), 'submitted');
+      assert.equal(await page.evaluate(()=>selectedService),name);
+      assert.equal(await page.evaluate(()=>opens),1);
+      assert.equal(await page.evaluate(()=>clicks),1);
+    }
+    await customOperator(true);
+    assert.equal(await page.evaluate(script({serviceOption:'校园专线 A'})), 'missing-service');
+    assert.equal(await page.evaluate(script({serviceOption:'校园专线 A'})), 'missing-service');
+    assert.equal(await page.evaluate(()=>opens),1);
+    assert.equal(await page.evaluate(()=>clicks),0);
+    await page.evaluate(()=>loadOperators());
+    assert.equal(await page.evaluate(script({serviceOption:'校园专线 A',submit:false})), 'filled');
+    assert.equal(await page.evaluate(()=>selectedService),'校园专线 A');
+    assert.equal(await page.evaluate(script({serviceOption:'校园专线 A'})), 'submitted');
+    assert.equal(await page.evaluate(()=>opens),1);
+    await customOperator();
+    await page.locator('#choose').evaluate(e=>{e.textContent='中国联通';});
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动',submit:false})), 'filled');
+    assert.equal(await page.evaluate(()=>selectedService),'中国移动');
+    assert.equal(await page.evaluate(script({serviceOption:'校园专线 A',submit:false})), 'filled');
+    assert.equal(await page.evaluate(()=>selectedService),'校园专线 A');
+    assert.equal(await page.evaluate(()=>opens),2);
+    await customOperator();
+    assert.equal(await page.evaluate(script({serviceOption:''})), 'service-required');
+    assert.equal(await page.evaluate(()=>opens),0);
+    assert.equal(await page.evaluate(()=>clicks),0);
+    await customOperator(true); await page.evaluate(script({serviceOption:'中国移动'}));
+    await page.evaluate(()=>{loadOperators();document.querySelector('[role=option]').setAttribute('aria-disabled','true');});
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动'})), 'missing-service');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    await customOperator(true); await page.evaluate(script({serviceOption:'中国移动'}));
+    await page.evaluate(()=>{loadOperators();document.querySelector('[role=option]').onclick=()=>{};});
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动'})), 'missing-service');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    await customOperator();
+    assert.equal(await page.evaluate(script({serviceOption:'不存在的服务'})), 'missing-service');
+    assert.equal(await page.evaluate(()=>selectedService),'');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    await customOperator(true); await page.evaluate(script({serviceOption:'中国移动'}));
+    await page.evaluate(()=>{loadOperators();const option=document.querySelector('[role=option]');option.after(option.cloneNode(true));});
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动'})), 'missing-service');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    await customOperator(true); await page.evaluate(script({serviceOption:'中国移动'}));
+    await page.evaluate(()=>{
+      loadOperators();const option=document.querySelector('[role=option]'),commit=option.onclick;
+      option.onclick=()=>{window.commitOperator=commit;document.getElementById('operator-options').hidden=true;};
+    });
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动'})), 'missing-service');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    await page.evaluate(()=>commitOperator());
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动'})), 'submitted');
+    assert.equal(await page.evaluate(()=>opens),1);
+    // A simple placeholder button also retains its selection across retries.
+    await customOperator();
+    await page.locator('#choose').evaluate(e=>{e.removeAttribute('role');e.removeAttribute('aria-controls');e.removeAttribute('aria-expanded');e.textContent='选择选项';});
+    assert.equal(await page.evaluate(script({serviceOption:'校园专线 A',submit:false})), 'filled');
+    assert.equal(await page.evaluate(script({serviceOption:'校园专线 A'})), 'submitted');
+    assert.equal(await page.evaluate(()=>opens),1);
+    // Top-of-page radios, outside the login form, use the school's click flow.
+    const radioNames = ['校园网','中国移动','中国电信','中国联通','校园专线 A'];
+    const radioPage = `<div id="operators">${radioNames.map((name,index)=>`<label><input type="radio" name="operator" value="${index}" ${index===0?'checked':''}>${name}</label>`).join('')}</div>
+      <form><input name="username"><input type="password"><button type="button" onclick="window.selectionAtSubmit=document.querySelector('[name=operator]:checked').value;window.clicks++">登录</button></form>`;
+    const loadRadios = async (html=radioPage) => {
+      await reset(); await page.setContent(html);
+      await page.evaluate(()=>{
+        window.operatorEvents=[];
+        for(const radio of document.querySelectorAll('input[type=radio]'))
+          radio.addEventListener('change',()=>operatorEvents.push(radio.value));
+      });
+    };
+    for(const [index,name] of radioNames.entries()) {
+      await loadRadios();
+      assert.equal(await page.evaluate(script({serviceOption:name})), 'submitted');
+      assert.equal(await page.evaluate(()=>selectionAtSubmit),String(index));
+      assert.deepEqual(await page.evaluate(()=>operatorEvents),index===0?[]:[String(index)]);
+      assert.equal(await page.evaluate(script({serviceOption:name})), 'already-submitted');
+      assert.equal(await page.evaluate(()=>clicks),1);
+    }
+    await loadRadios(radioPage.replaceAll('<label>','').replaceAll('</label>',''));
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动'})), 'submitted');
+    assert.equal(await page.evaluate(()=>selectionAtSubmit),'1');
+    await loadRadios(radioPage.replaceAll('type="radio"','type="radio" style="display:none"'));
+    assert.equal(await page.evaluate(script({serviceOption:'中国联通'})), 'submitted');
+    assert.equal(await page.evaluate(()=>selectionAtSubmit),'3');
+    await loadRadios();
+    await page.locator('[name=operator][value="1"]').evaluate(input=>{
+      const label=input.parentElement;input.id='mobile';label.htmlFor='mobile';label.before(input);
+    });
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动'})), 'submitted');
+    assert.equal(await page.evaluate(()=>selectionAtSubmit),'1');
+    await loadRadios();
+    await page.locator('[name=operator][value="1"]').evaluate(input=>{input.parentElement.setAttribute('role','radio');});
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动'})), 'submitted');
+    assert.equal(await page.evaluate(()=>selectionAtSubmit),'1');
+    await loadRadios();
+    assert.equal(await page.evaluate(script({serviceOption:''})), 'submitted');
+    assert.equal(await page.evaluate(()=>selectionAtSubmit),'0');
+    await loadRadios();
+    assert.equal(await page.evaluate(script({serviceOption:'不存在'})), 'missing-service');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    await loadRadios(radioPage.replace('<div id="operators">','<fieldset disabled id="operators">').replace('</div>','</fieldset>'));
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动'})), 'missing-service');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    await loadRadios(radioPage.replace('<div id="operators">','<form id="other">').replace('</div>','</form>'));
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动'})), 'missing-service');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    await loadRadios(radioPage+'<label><input type="radio" name="other-operator">中国移动</label>');
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动'})), 'missing-service');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    await loadRadios();
+    await page.locator('[name=operator][value="1"]').evaluate(e=>e.onclick=event=>{window.radioAttempts=(window.radioAttempts||0)+1;event.preventDefault();});
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动'})), 'missing-service');
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动'})), 'missing-service');
+    assert.equal(await page.evaluate(()=>radioAttempts),1);
+    assert.equal(await page.evaluate(()=>clicks),0);
+    await loadRadios();
+    await page.locator('[name=operator][value="1"]').evaluate(e=>e.onchange=()=>{document.querySelector('input[type=password]').value='';});
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动'})), 'missing-fields');
+    assert.equal(await page.evaluate(()=>clicks),0);
+    // Accessible radio buttons may update aria-checked asynchronously.
+    await reset();
+    await page.setContent(`<div role="radiogroup"><div role="radio" aria-checked="true">校园网</div><div role="radio" aria-checked="false" id="mobile-radio">中国移动</div></div>
+      <form><input name="username"><input type="password"><button type="button" onclick="window.clicks++">登录</button></form>`);
+    await page.evaluate(()=>{
+      window.radioAttempts=0;
+      document.getElementById('mobile-radio').onclick=()=>{
+        radioAttempts++;
+        window.commitRadio=()=>{document.querySelectorAll('[role=radio]').forEach(e=>e.setAttribute('aria-checked',String(e.id==='mobile-radio')));};
+      };
+    });
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动'})), 'missing-service');
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动'})), 'missing-service');
+    assert.equal(await page.evaluate(()=>radioAttempts),1);
+    assert.equal(await page.evaluate(()=>clicks),0);
+    await page.evaluate(()=>commitRadio());
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动',submit:false})), 'filled');
+    assert.equal(await page.evaluate(script({serviceOption:'中国移动'})), 'submitted');
+    assert.equal(await page.evaluate(()=>radioAttempts),1);
     // School ePortal uses clickable divs and a hidden value, not a native select.
     const addServiceMenu = async (lazy=false) => page.evaluate(lazy => {
       document.body.insertAdjacentHTML('beforeend', '<input type="hidden" id="net_access_type"><div id="serviceShowHideTop"><span id="selectDisname">请选择服务</span></div><div id="serviceShowHide" style="display:none"></div>');
@@ -242,6 +439,6 @@ document.getElementById('loginLink').onclick = () => clicks++;
     await page.goto('http://portal.test/eportal/success.jsp?userIndex=fixture');
     assert.equal(await page.evaluate(confirmed({statusOnly:true})),'authenticated');
     assert.equal(await page.evaluate(confirmed({statusOnly:true,origin:'http://other.test'})),'wrong-origin');
-    console.log('PASS: service selection (native/ePortal/lazy/blank/missing/disabled/ambiguous/rejected/operator fields) and ePortal real DOM, hidden inputs, readonly tips, focus/blur, image link, delayed button, explicit selectors, origin, deduplication and shared Mac/Windows credential script parity.');
+    console.log('PASS: Windows top-of-page native/hidden/accessible radios, arbitrary operator names, school change handlers, delayed selection, native/custom menus, open-before-load, selection before submission, other-form isolation, missing/disabled/ambiguous/rejected options, credential fields, origin and submission deduplication.');
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

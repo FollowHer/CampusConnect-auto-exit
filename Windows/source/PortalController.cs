@@ -246,6 +246,9 @@ internal sealed class PortalController
                 case "missing-service" when attempt < 80: await Task.Delay(150); continue;
                 case "missing-service":
                     RequiresInteraction = true; finished = true; password = ""; Status?.Invoke("未找到或未能选中填写的服务选项，请检查完整名称或在网页中手动选择。网页没有选项时，请清空设置中的服务选项。"); return;
+                case "service-required":
+                    RequiresInteraction = true; finished = true; password = "";
+                    Status?.Invoke("认证页尚未选择运营商或服务。请在设置的“运营商 / 服务选项”中填写网页上的完整名称（如中国移动、中国联通、中国电信），保存后重新认证；也可直接在网页中手动选择并登录。"); return;
                 case "filled":
                     RequiresInteraction = true; finished = true; password = ""; Status?.Invoke("账号密码已填写，请在网页中手动点击登录。"); return;
                 case "missing-submit":

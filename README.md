@@ -11,7 +11,7 @@
 >
 > 使用中如遇到连接或认证问题，请点击 **程序左下角的感叹号**，查看联系方式并联系作者。反馈时请提供 **学校名称** 和 **连接失败的完整视频**，方便排查问题、持续完善适配。
 
-**CampusConnect 2.0.0 正式版**：[下载正式版](https://github.com/Ye9137/CampusConnect/releases/tag/v2.0.0) · [更新说明](2.0-更新说明.md)。Windows 与 macOS 均支持明确的 Wi-Fi / 有线选择、四种有线认证入口、网页必选框自动勾选和左下角问题反馈入口。
+**Windows 2.0.2**：[下载安装包](https://github.com/Ye9137/CampusConnect/releases/tag/v2.0.2) · [更新说明](Windows/2.0.2-更新说明.md)。新增动态运营商菜单、顶部单选项与自定义服务名称选择，选中后再提交登录。macOS 当前正式版为 [2.0.0](https://github.com/Ye9137/CampusConnect/releases/tag/v2.0.0)。
 
 [![Build](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml/badge.svg)](https://github.com/Ye9137/CampusConnect/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -19,6 +19,15 @@
 由 [Ye9137](https://github.com/Ye9137) 维护，使用 MIT 许可证开源。
 
 分别为 macOS 和 Windows 制作的桌面校园网连接工具。默认校园 Wi-Fi 为 `HNPI-STU`，认证地址为 `http://192.168.0.123`，可在设置中修改。
+
+## Windows 2.0.2 新增功能
+
+- **动态菜单先展开再选择**：点击运营商或服务菜单，等待列表加载后按设置中的完整名称选择，确认选中后再登录。
+- **顶部横向单选项自动选择**：支持「校园网 / 中国移动 / 中国电信 / 中国联通」这类位于登录表单上方或表单外的单选项，并触发网页原有点击和更改事件。
+- **选项名称可自定义**：在「校园网设置 → 运营商 / 服务选项」填写网页显示的完整名称，不限于三大运营商；网页没有该选项时留空。
+- **完善选择失败提示**：等待异步选项与选中结果；找不到、同名不唯一、禁用或选择被网页拒绝时，不提交登录。
+
+本次仅更新 Windows x64，保留 2.0.0 已有功能。使用方法与验证范围见 [2.0.2 更新说明](Windows/2.0.2-更新说明.md)。
 
 ## 2.0 正式版
 
@@ -68,7 +77,7 @@ ping 使用系统路由，可能经过 VPN。Windows x64 与 macOS Apple 芯片 
 
 ## 下载
 
-**[Windows 2.0.0 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/v2.0.0/CampusConnect-Windows-x64-2.0.0-Setup.exe)** · **[macOS 2.0.0 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v2.0.0/CampusConnect-macOS-universal-2.0.0.zip)** · [源码与校验文件](https://github.com/Ye9137/CampusConnect/releases/tag/v2.0.0)
+**[Windows 2.0.2 安装包（x64）](https://github.com/Ye9137/CampusConnect/releases/download/v2.0.2/CampusConnect-Windows-x64-2.0.2-Setup.exe)** · **[macOS 2.0.0 通用版](https://github.com/Ye9137/CampusConnect/releases/download/v2.0.0/CampusConnect-macOS-universal-2.0.0.zip)** · [Windows 2.0.2 源码与校验文件](https://github.com/Ye9137/CampusConnect/releases/tag/v2.0.2)
 
 ## 2.0 正式版界面预览
 
