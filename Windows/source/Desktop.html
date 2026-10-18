@@ -109,6 +109,10 @@ select {font:inherit;border:1px solid var(--border,#ddd);border-radius:8px;paddi
           <div class="grow"><h3>开机自启</h3><div class="description" id="startup-description">登录 Windows 后在托盘运行，自动连接按已保存设置执行。开关立即生效。</div><div class="settings-note">若启动项已被 Windows 禁用，请在系统“启动应用”中重新开启。</div></div>
           <input id="startup" class="toggle" type="checkbox" aria-label="开机自启" aria-describedby="startup-description" disabled>
         </div>
+        <div class="card row between">
+          <div class="grow"><h3>联网成功后自动退出</h3><div class="description" id="exit-description">确认目标校园网可以上网后彻底退出，释放托盘和后台进程。修改后请保存。</div><div class="settings-note">退出后不再自动重连；需要时重新打开助手。使用“校园网助手设置”快捷方式可保留窗口修改配置。</div></div>
+          <input id="exitAfterConnected" class="toggle" type="checkbox" aria-label="联网成功后自动退出" aria-describedby="exit-description">
+        </div>
         <div class="card stack">
           <h3 class="section-title"><i id="settings-network-icon" data-icon="wifi"></i>校园网络</h3>
           <div class="field">网络连接方式</div>
@@ -164,7 +168,7 @@ select {font:inherit;border:1px solid var(--border,#ddd);border-radius:8px;paddi
       <div class="portal-slot" id="portal-slot"><div class="hint"><i data-icon="globe"></i><p>学校认证页面将在这里打开<br><span id="portal-connection-hint">请先连接已设置的校园 Wi-Fi</span></p></div></div>
     </section>
   </div>
-  <footer class="footer"><span class="dot" id="status-dot"></span><span class="status" id="status">准备就绪</span><span class="version">v2.0.3 · Windows</span></footer>
+  <footer class="footer"><span class="dot" id="status-dot"></span><span class="status" id="status">准备就绪</span><span class="version">v2.0.3.1 · 自动退出定制版</span></footer>
 </main>
 </div>
 <script>
@@ -261,13 +265,13 @@ function selectConnection(next) {
  setMode(mode);dirty=true;checkpoint();
 }
 function profile() {
- return {ssid:byId('ssid').value.trim(),wiredAuth:byId('wiredAuth').value,ethernetName:byId('ethernetName').value.trim(),broadbandName:byId('broadbandName').value.trim(),authenticationClient:byId('authenticationClient').value,portalUrl:byId('portalUrl').value.trim(),username:byId('username').value.trim(),serviceOption:byId('serviceOption').value.trim(),useSavedWifiProfile:mode==='saved',portalEnabled:byId('portalEnabled').checked,autoSubmit:byId('autoSubmit').checked,automatic,userSelector:byId('userSelector').value.trim(),passwordSelector:byId('passwordSelector').value.trim(),submitSelector:byId('submitSelector').value.trim()};
+ return {ssid:byId('ssid').value.trim(),wiredAuth:byId('wiredAuth').value,ethernetName:byId('ethernetName').value.trim(),broadbandName:byId('broadbandName').value.trim(),authenticationClient:byId('authenticationClient').value,portalUrl:byId('portalUrl').value.trim(),username:byId('username').value.trim(),serviceOption:byId('serviceOption').value.trim(),useSavedWifiProfile:mode==='saved',portalEnabled:byId('portalEnabled').checked,autoSubmit:byId('autoSubmit').checked,exitAfterConnected:byId('exitAfterConnected').checked,automatic,userSelector:byId('userSelector').value.trim(),passwordSelector:byId('passwordSelector').value.trim(),submitSelector:byId('submitSelector').value.trim()};
 }
 function loadProfile(p,password) {
  for(const key of ['ssid','ethernetName','broadbandName','authenticationClient','portalUrl','username','serviceOption','userSelector','passwordSelector','submitSelector'])byId(key).value=p[key]||'';
  byId('wiredAuth').value=wiredLabels[p.wiredAuth]?p.wiredAuth:'web';
  if(p.ssid?.trim())lastWifiSsid=p.ssid;
- byId('password').value=password||'';byId('portalEnabled').checked=p.portalEnabled;byId('autoSubmit').checked=p.autoSubmit;
+ byId('password').value=password||'';byId('portalEnabled').checked=p.portalEnabled;byId('autoSubmit').checked=p.autoSubmit;byId('exitAfterConnected').checked=!!p.exitAfterConnected;
  byId('portal-fields').hidden=!p.portalEnabled;setMode(p.useSavedWifiProfile?'saved':'open');automatic=p.automatic;dirty=false;
 }
 function snapshot() {

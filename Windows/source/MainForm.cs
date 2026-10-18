@@ -35,10 +35,13 @@ internal sealed partial class MainForm : Form
     private int generation;
     private Rectangle portalBounds;
     private readonly string? verificationPath;
+    private readonly bool settingsSession;
 
-    public MainForm(string? verificationPath = null, bool startInTray = false)
+    public MainForm(string? verificationPath = null, bool startInTray = false, bool settingsSession = false)
     {
         this.verificationPath = verificationPath;
+        this.settingsSession = settingsSession;
+        if (settingsSession) page = "settings";
         portal = new(GetBrowserEnvironmentAsync);
         Text = "校园网助手";
         AutoScaleMode = AutoScaleMode.Dpi;
@@ -56,7 +59,7 @@ internal sealed partial class MainForm : Form
         menu.Items.Add("打开主窗口", null, (_, _) => RestoreWindow());
         menu.Items.Add("刷新界面", null, (_, _) => RestoreWindow());
         menu.Items.Add("暂停自动连接", null, (_, _) => Pause());
-        menu.Items.Add("退出", null, (_, _) => { exiting = true; Close(); });
+        menu.Items.Add("退出", null, (_, _) => ExitApplication());
         tray = new NotifyIcon { Icon = Icon, Text = "校园网助手", Visible = true, ContextMenuStrip = menu };
         tray.DoubleClick += (_, _) => RestoreWindow();
         FormClosing += (_, e) => {
@@ -66,7 +69,9 @@ internal sealed partial class MainForm : Form
             }
         };
         FormClosed += (_, _) => {
+            generation++;
             wiredAttempt?.Cancel();
+            portal.Stop(clearView: false);
             timer.Stop(); timer.Dispose(); tray.Dispose();
             portal.View.Dispose(); shell.Dispose();
         };
@@ -179,7 +184,7 @@ internal sealed partial class MainForm : Form
                 timer.Start();
                 // Connect immediately from the WLAN cache when the target is already visible.
                 await RefreshAsync(scan: false);
-                if (!saved.IsWired && currentSsid != saved.Ssid) await RefreshAsync(); break;
+                if (!IsDisposed && !saved.IsWired && currentSsid != saved.Ssid) await RefreshAsync(); break;
             case "hydrated":
                 shellReady?.TrySetResult(true);
                 break;
@@ -341,7 +346,7 @@ internal sealed partial class MainForm : Form
     }
     private async Task RefreshAsync(bool scan = true)
     {
-        if (busy || IsDisposed) return;
+        if (busy || IsDisposed || exiting) return;
         busy = true; PushState();
         try {
             await SafeAsync(async () => {
@@ -438,7 +443,7 @@ internal sealed partial class MainForm : Form
     }
     private async Task CheckInternetAsync(bool openIfOffline)
     {
-        if (checking) return;
+        if (checking || exiting || IsDisposed) return;
         checking = true;
         try {
             var expected = generation;
@@ -464,7 +469,10 @@ internal sealed partial class MainForm : Form
             if (expected != generation || IsDisposed || !connected) return;
             online = result == InternetStatus.Online;
             recovery.Observe(result);
-            if (result == InternetStatus.Online) { portal.ConfirmInternetAccess(); status = ""; }
+            if (result == InternetStatus.Online) {
+                portal.ConfirmInternetAccess(); status = "";
+                if (TryExitAfterConnected(expected, connected, result)) return;
+            }
             else portal.ReportInternetUnavailable();
             if (result != InternetStatus.Online) Record("百度 ping 不通，判定未联网。");
             if (saved.Automatic && saved.AutoSubmit && !portal.IsAuthenticating && recovery.ShouldAuthenticate(saved.Automatic, saved.UsesWebPortal, DateTimeOffset.UtcNow)) {
@@ -476,6 +484,21 @@ internal sealed partial class MainForm : Form
     private void StopAuthentication()
     {
         portal.Stop();
+    }
+    private bool TryExitAfterConnected(int expected, bool connected, InternetStatus result)
+    {
+        // Called only after rechecking the saved target network following the internet probe.
+        // A settings-only launch must remain open even if the campus network is already online.
+        if (exiting || IsDisposed || settingsSession || !saved.ExitAfterConnected ||
+            expected != generation || !connected || result != InternetStatus.Online) return false;
+        ExitApplication();
+        return true;
+    }
+    private void ExitApplication()
+    {
+        if (exiting || IsDisposed) return;
+        exiting = true;
+        Close();
     }
     private async Task OpenPortalAsync(bool discover = false, bool showPage = true)
     {

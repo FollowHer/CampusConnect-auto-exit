@@ -14,6 +14,10 @@ Expect(profile.ServiceOption == "", "service selection defaults to blank");
 var serviceProfile = JsonSerializer.Deserialize<CampusProfile>(JsonSerializer.Serialize(profile with { ServiceOption = "联通接入服务" }))!;
 Expect(serviceProfile.ServiceOption == "联通接入服务", "service selection survives configuration round trip");
 Expect(!profile.Automatic, "automation off for first launch");
+Expect(!profile.ExitAfterConnected, "legacy profiles keep background reconnect unless explicitly enabled");
+var exitProfile = JsonSerializer.Deserialize<CampusProfile>(JsonSerializer.Serialize(profile with { ExitAfterConnected = true }))!;
+Expect(exitProfile.ExitAfterConnected, "exit after connection persists across restart");
+Expect(!JsonSerializer.Deserialize<CampusProfile>("{}")!.ExitAfterConnected, "old configuration remains compatible");
 
 // Previous API/browser selections are ignored on upgrade, preserving the web form settings.
 foreach (var oldMethod in new[] { "direct", "browser" }) {

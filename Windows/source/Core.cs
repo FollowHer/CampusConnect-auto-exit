@@ -32,6 +32,7 @@ public sealed record CampusProfile
     public string SubmitSelector { get; init; } = "";
     public bool AutoSubmit { get; init; } = true;
     public bool Automatic { get; init; }
+    public bool ExitAfterConnected { get; init; }
 
     public static string? Origin(string address)
     {

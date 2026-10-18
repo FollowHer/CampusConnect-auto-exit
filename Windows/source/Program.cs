@@ -5,7 +5,8 @@ internal static class Program
     [STAThread]
     static void Main(string[] args)
     {
-        var startInTray = args.Contains("--startup", StringComparer.OrdinalIgnoreCase);
+        var settingsSession = args.Contains("--settings", StringComparer.OrdinalIgnoreCase);
+        var startInTray = !settingsSession && args.Contains("--startup", StringComparer.OrdinalIgnoreCase);
         using var instance = new Mutex(true, "Local\\CampusConnect.Windows", out var created);
         if (!created) { if (!startInTray) MessageBox.Show("校园网助手已在运行，请从系统托盘打开。", "校园网助手"); return; }
         // The .NET bundle extracts native libraries into its private cache.
@@ -18,6 +19,6 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         var verificationIndex = Array.IndexOf(args, "--verify-ui");
         var verificationPath = verificationIndex >= 0 && verificationIndex + 1 < args.Length ? args[verificationIndex + 1] : null;
-        Application.Run(new MainForm(verificationPath, startInTray));
+        Application.Run(new MainForm(verificationPath, startInTray, settingsSession));
     }
 }

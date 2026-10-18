@@ -264,6 +264,7 @@ Section "程序文件与开始菜单快捷方式（必需）" SEC_APP
   Delete "$DESKTOP\校园 Wi-Fi 助手.lnk"
   CreateDirectory "$SMPROGRAMS\校园 Wi-Fi 助手"
   CreateShortcut "$SMPROGRAMS\校园 Wi-Fi 助手\校园 Wi-Fi 助手.lnk" "$INSTDIR\CampusConnect.exe" "" "$INSTDIR\CampusConnect.exe" 0
+  CreateShortcut "$SMPROGRAMS\校园 Wi-Fi 助手\校园网助手设置.lnk" "$INSTDIR\CampusConnect.exe" "--settings" "$INSTDIR\CampusConnect.exe" 0
   CreateShortcut "$SMPROGRAMS\校园 Wi-Fi 助手\卸载校园 Wi-Fi 助手.lnk" "$INSTDIR\Uninstall.exe"
   Goto install_complete
   install_files_failed:
@@ -348,6 +349,7 @@ Section "Uninstall"
   RMDir "$INSTDIR"
   Delete "$DESKTOP\校园 Wi-Fi 助手.lnk"
   Delete "$SMPROGRAMS\校园 Wi-Fi 助手\校园 Wi-Fi 助手.lnk"
+  Delete "$SMPROGRAMS\校园 Wi-Fi 助手\校园网助手设置.lnk"
   Delete "$SMPROGRAMS\校园 Wi-Fi 助手\卸载校园 Wi-Fi 助手.lnk"
   RMDir "$SMPROGRAMS\校园 Wi-Fi 助手"
   DeleteRegKey HKCU "${UNINSTALL_KEY}"

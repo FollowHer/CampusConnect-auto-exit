@@ -8,10 +8,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>CampusConnect</AssemblyName>
-    <Version>2.0.3</Version>
+    <Version>2.0.3.1</Version>
+    <InformationalVersion>2.0.3.1-local-auto-exit</InformationalVersion>
     <ApplicationIcon>AppIcon.ico</ApplicationIcon>
     <PublishSingleFile>true</PublishSingleFile>
-    <PublishReadyToRun>true</PublishReadyToRun>
+    <PublishReadyToRun>false</PublishReadyToRun>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <IncludeAllContentForSelfExtract>false</IncludeAllContentForSelfExtract>
     <EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>

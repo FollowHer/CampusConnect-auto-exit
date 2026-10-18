@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $project = Join-Path $PSScriptRoot 'source/CampusConnect.csproj'
 $output = Join-Path $PSScriptRoot "dist/$Runtime"
 $staging = Join-Path $PSScriptRoot ("work/publish-" + [guid]::NewGuid().ToString('N'))
-dotnet publish $project -c Release -r $Runtime --self-contained true -p:PublishReadyToRun=true -o $staging
+dotnet publish $project -c Release -r $Runtime --self-contained true -p:PublishReadyToRun=false -o $staging
 if ($LASTEXITCODE -ne 0) { throw 'Windows build failed.' }
 $files = @(Get-ChildItem $staging -Recurse -File)
 if ($files.Count -ne 1 -or $files[0].Name -ne 'CampusConnect.exe') {
