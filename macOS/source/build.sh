@@ -8,6 +8,7 @@ task_app="${task_output_dir}/CampusConnect.app"
 mkdir -p "${task_app}/Contents/MacOS" "${task_app}/Contents/Resources" "${task_build_dir}"
 cp "${task_source_dir}/PortalBootstrap.js" "${task_app}/Contents/Resources/"
 cp "${task_source_dir}/../../LICENSE" "${task_app}/Contents/Resources/LICENSE.txt"
+cp "${task_source_dir}/../../THIRD_PARTY_NOTICES.md" "${task_app}/Contents/Resources/THIRD_PARTY_NOTICES.md"
 cp "${task_source_dir}/Info.plist" "${task_app}/Contents/Info.plist"
 for task_arch in arm64 x86_64; do
 xcrun swiftc -swift-version 5 -O -target "${task_arch}-apple-macosx14.0" \

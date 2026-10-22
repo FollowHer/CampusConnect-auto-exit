@@ -1,4 +1,4 @@
-name: Build desktop apps
+name: Build and publish FollowHer auto-exit
 on:
   push:
     branches: [main, master]
@@ -7,23 +7,32 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: auto-exit-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   macos:
-    runs-on: macos-14
+    runs-on: macos-15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Test core and browser script
         run: zsh macOS/test.sh
       - name: Test native WKWebView first submission
         run: zsh macOS/test-webkit.sh
+      - name: Test automatic exit lifecycle
+        run: zsh macOS/test-lifecycle.sh
       - name: Build universal app
         run: zsh macOS/source/build.sh
       - name: Package app
-        run: ditto -c -k --sequesterRsrc --keepParent macOS/CampusConnect.app CampusConnect-macOS-universal.zip
+        run: |
+          lipo -verify_arch arm64 x86_64 macOS/CampusConnect.app/Contents/MacOS/CampusConnect
+          codesign --verify --deep --strict macOS/CampusConnect.app
+          ditto -c -k --sequesterRsrc --keepParent macOS/CampusConnect.app CampusConnect-macOS-universal-2.0.4-auto-exit.zip
       - uses: actions/upload-artifact@v4
         with:
           name: CampusConnect-macOS-universal
-          path: CampusConnect-macOS-universal.zip
+          path: CampusConnect-macOS-universal-2.0.4-auto-exit.zip
   windows:
     name: windows (${{ matrix.runtime }})
     runs-on: ${{ matrix.runner }}
@@ -48,6 +57,8 @@ jobs:
           node-version: '22'
       - name: Test core and native layouts
         run: dotnet run --project Windows/tests -c Release
+      - name: Test automatic exit lifecycle
+        run: dotnet run --project Windows/exit-tests -c Release
       - name: Test browser automation
         run: node Windows/tests/portal.test.mjs
       - name: Test desktop pages
@@ -79,7 +90,27 @@ jobs:
           name: native-test-diagnostics-${{ matrix.runtime }}
           path: Windows/installer/work/smoke-diagnostics/
           if-no-files-found: ignore
+      - name: Name release installer
+        shell: pwsh
+        run: Copy-Item Windows/installer/dist/CampusConnect-Windows-${{ matrix.arch }}-Setup.exe CampusConnect-Windows-${{ matrix.arch }}-2.0.4-auto-exit-Setup.exe
       - uses: actions/upload-artifact@v4
         with:
           name: CampusConnect-Setup-${{ matrix.runtime }}
-          path: Windows/installer/dist/*-Setup.exe
+          path: CampusConnect-Windows-${{ matrix.arch }}-2.0.4-auto-exit-Setup.exe
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'FollowHer/CampusConnect-auto-exit'
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: CampusConnect-*
+          path: release
+          merge-multiple: true
+      - name: Publish verified release and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/publish-fork-release.sh

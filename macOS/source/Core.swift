@@ -45,10 +45,11 @@ struct CampusProfile: Codable, Equatable {
     var submitSelector = ""
     var autoSubmit = true
     var automatic = false
+    var exitAfterConnected = false
 
     enum CodingKeys: String, CodingKey {
         case ssid, joinMode, wifiUsername, portalEnabled, portalURL, username
-        case serviceOption, userSelector, passwordSelector, submitSelector, autoSubmit, automatic
+        case serviceOption, userSelector, passwordSelector, submitSelector, autoSubmit, automatic, exitAfterConnected
         case wiredAuth, ethernetName, broadbandName, authenticationClient
     }
     init() {}
@@ -70,6 +71,7 @@ struct CampusProfile: Codable, Equatable {
         submitSelector = try values.decodeIfPresent(String.self, forKey: .submitSelector) ?? ""
         autoSubmit = try values.decodeIfPresent(Bool.self, forKey: .autoSubmit) ?? true
         automatic = try values.decodeIfPresent(Bool.self, forKey: .automatic) ?? false
+        exitAfterConnected = try values.decodeIfPresent(Bool.self, forKey: .exitAfterConnected) ?? false
     }
 
     var validPortalURL: URL? {

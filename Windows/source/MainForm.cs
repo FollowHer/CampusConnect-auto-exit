@@ -229,6 +229,7 @@ internal sealed partial class MainForm : Form
                     Record(startup.IsEnabled() ? "开机自启已开启，登录 Windows 后在托盘运行。" : "开机自启已关闭。");
                 } finally { PushStartup(); }
                 break;
+            case "feedback": OpenSettings("https://github.com/FollowHer/CampusConnect-auto-exit/issues"); break;
             case "location": OpenSettings("ms-settings:privacy-location"); break;
             case "wifiSettings": OpenSettings("ms-settings:network-wifi"); break;
             case "ethernetSettings": OpenSettings("ms-settings:network-ethernet"); break;

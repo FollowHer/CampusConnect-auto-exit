@@ -44,6 +44,12 @@ import JavaScriptCore
         expect(!preservedProfile.automatic, "local storage preserves paused automation")
         let oldProfile = try JSONDecoder().decode(CampusProfile.self, from: Data("{}".utf8))
         expect(oldProfile.serviceOption.isEmpty, "old configurations default to blank service")
+        expect(!oldProfile.exitAfterConnected, "legacy configuration keeps automatic exit disabled")
+        var exitProfile = CampusProfile()
+        exitProfile.exitAfterConnected = true
+        try LocalStore.save(profile: exitProfile, directory: localDirectory)
+        let reloadedExitProfile = try LocalStore.load(directory: localDirectory).profile
+        expect(reloadedExitProfile.exitAfterConnected, "automatic exit survives save and reload")
         expect(PortalFillRetry.shouldRetry(result: "missing-service", scriptFailed: false, attempt: 1), "wait for delayed service options")
         expect(!PortalFillRetry.shouldRetry(result: "missing-service", scriptFailed: false, attempt: 200), "service waiting is bounded")
         var escapingProfile = CampusProfile()

@@ -56,11 +56,19 @@ enum Page: String, CaseIterable {
     private var connectionGeneration = 0
     private var recovery = PortalRecovery()
     private var checkingInternet = false
+    private let settingsSession: Bool
+    private let terminateApplication: () -> Void
+    private(set) var isExiting = false
 
-    init(preview: Bool = false) {
-        let loaded = preview ? CampusProfile() : ((try? LocalStore.load())?.profile ?? CampusProfile())
+    init(preview: Bool = false, initialProfile: CampusProfile? = nil,
+         settingsSession: Bool = CommandLine.arguments.contains("--settings"),
+         terminateApplication: @escaping () -> Void = { NSApplication.shared.terminate(nil) }) {
+        let loaded = initialProfile ?? (preview ? CampusProfile() : ((try? LocalStore.load())?.profile ?? CampusProfile()))
+        self.settingsSession = settingsSession
+        self.terminateApplication = terminateApplication
         saved = loaded; draft = loaded; automatic = loaded.automatic
         super.init()
+        if settingsSession { page = .settings }
         lastDraftSSID = loaded.isWired ? "HNPI-STU" : loaded.ssid
         if preview { return }
         refreshWiredOptions()
@@ -149,7 +157,7 @@ enum Page: String, CaseIterable {
     }
 
     func refresh(scan: Bool = true) {
-        guard !scanning, !joining else { return }
+        guard !isExiting, !scanning, !joining else { return }
         if saved.isWired {
             refreshWiredConnection()
             if wiredConnected { verifyInternet(openIfOffline: automatic) }
@@ -304,7 +312,7 @@ enum Page: String, CaseIterable {
     }
 
     func verifyInternet(openIfOffline: Bool = false, manual: Bool = false) {
-        guard !checkingInternet, campusConnected else { return }
+        guard !isExiting, !checkingInternet, campusConnected else { return }
         checkingInternet = true
         let expected = connectionGeneration
         let expectedSSID = saved.ssid
@@ -320,25 +328,41 @@ enum Page: String, CaseIterable {
             guard let self else { return }
             self.wifi.readConnection(profile: self.saved) { [weak self] connected in
                 guard let self else { return }
-                self.checkingInternet = false
-                guard expected == self.connectionGeneration, self.saved.ssid == expectedSSID, connected else { return }
-                self.internet = result == .online
-                self.recovery.observe(result)
-                if result == .online { self.portal.confirmInternetAccess(); self.status = "" }
-                else {
-                    self.authenticated = false
-                    self.portal.reportInternetUnavailable()
-                    self.record("百度 ping 不通，判定未联网。")
-                    if self.automatic && self.saved.usesSystemAuthentication && self.policy.shouldPrepareWired(enabled: true, needed: true, busy: self.joining, now: Date()) {
-                        self.prepareWired(manual: false)
-                    } else if self.automatic && self.saved.autoSubmit && !self.portal.isAuthenticating &&
-                        self.recovery.shouldAuthenticate(enabled: self.automatic, portalEnabled: self.saved.usesWebPortal, now: Date()) {
-                        self.record("百度 ping 不通，正在重新连接校园网认证…")
-                        self.openPortal(showPage: false)
-                    }
-                }
+                self.handleInternetResult(result, expectedGeneration: expected, expectedSSID: expectedSSID, connected: connected)
             }
         }
+    }
+    func handleInternetResult(_ result: InternetStatus, expectedGeneration: Int, expectedSSID: String, connected: Bool) {
+        checkingInternet = false
+        guard !isExiting, expectedGeneration == connectionGeneration, saved.ssid == expectedSSID, connected else { return }
+        internet = result == .online
+        recovery.observe(result)
+        if result == .online {
+            portal.confirmInternetAccess(); status = ""
+            if saved.exitAfterConnected && !settingsSession { quit() }
+        } else {
+            authenticated = false
+            portal.reportInternetUnavailable()
+            record("百度 ping 不通，判定未联网。")
+            if automatic && saved.usesSystemAuthentication && policy.shouldPrepareWired(enabled: true, needed: true, busy: joining, now: Date()) {
+                prepareWired(manual: false)
+            } else if automatic && saved.autoSubmit && !portal.isAuthenticating &&
+                recovery.shouldAuthenticate(enabled: automatic, portalEnabled: saved.usesWebPortal, now: Date()) {
+                record("百度 ping 不通，正在重新连接校园网认证…")
+                openPortal(showPage: false)
+            }
+        }
+    }
+    func quit() {
+        guard !isExiting else { return }
+        isExiting = true
+        connectionGeneration += 1
+        timer?.invalidate(); timer = nil
+        portal.onSubmission = nil; portal.onAuthentication = nil
+        WiredNetwork.shared.onChange = nil
+        location.delegate = nil
+        stopAuthentication()
+        terminateApplication()
     }
     func stopAuthentication() {
         wiredAuthentication.cancel(); joining = false
@@ -450,8 +474,11 @@ struct RootView: View {
                     .buttonStyle(.plain)
                     .help("查看问题反馈方式")
                     .popover(isPresented: $model.showingFeedback, arrowEdge: .bottom) {
-                        (Text("使用中如有任何问题，请关注抖音 ") + Text("3325725312q").fontWeight(.semibold) + Text("，进群反馈。\n\n如果使用正常，也欢迎关注我的抖音，并发送你的大学名称，帮助更多小伙伴使用小助手。"))
-                            .font(.system(size: 12)).lineSpacing(4).textSelection(.enabled)
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("本修改版由 FollowHer 维护。请通过 GitHub Issues 反馈问题；社交主页待补充。")
+                                .textSelection(.enabled)
+                            Link("打开本修改版反馈页面", destination: URL(string: "https://github.com/FollowHer/CampusConnect-auto-exit/issues")!)
+                        }.font(.system(size: 12)).lineSpacing(4)
                             .fixedSize(horizontal: false, vertical: true).padding(16).frame(width: 270)
                     }
                     Label("本地运行", systemImage: "lock.shield").font(.system(size: 12, weight: .semibold))
@@ -498,7 +525,7 @@ struct RootView: View {
                         Text(model.status).font(.system(size: 11)).lineLimit(2)
                     }
                     Spacer()
-                    Text("v2.0.3 · macOS").font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text("v2.0.4 · FollowHer 自动退出版").font(.system(size: 10)).foregroundStyle(.secondary)
                 }.padding(.horizontal, 24).padding(.vertical, 12)
             }.background(Color(nsColor: .textBackgroundColor))
         }.frame(minWidth: 980, minHeight: 700).tint(accent).textSelection(.disabled)
@@ -612,6 +639,20 @@ struct RootView: View {
                         }
                         Spacer()
                         Toggle("登录时自动启动", isOn: Binding(get: { model.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
+                            .labelsHidden().toggleStyle(.switch)
+                    }
+                }
+                card {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("联网成功后自动退出").font(.system(size: 15, weight: .semibold))
+                            Text("确认目标校园网可以上网后，退出程序和菜单栏后台。修改后请保存。")
+                                .font(.system(size: 12)).foregroundStyle(.secondary)
+                            Text("退出后不再自动重连。使用 --settings 启动可保留窗口修改配置。")
+                                .font(.system(size: 11)).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Toggle("联网成功后自动退出", isOn: $model.draft.exitAfterConnected)
                             .labelsHidden().toggleStyle(.switch)
                     }
                 }
@@ -753,7 +794,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let loginLaunch = NSAppleEventManager.shared().currentAppleEvent?
             .paramDescriptor(forKeyword: AEKeyword(keyAELaunchedAsLogInItem)) != nil
-        if loginLaunch {
+        if loginLaunch && !CommandLine.arguments.contains("--settings") {
             DispatchQueue.main.async {
                 NSApplication.shared.windows.filter { $0.canBecomeMain }.forEach { $0.orderOut(nil) }
                 NSApplication.shared.hide(nil)
@@ -766,6 +807,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+#if !CAMPUS_LIFECYCLE_TESTS
 @main struct CampusConnectApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var model: AppModel
@@ -794,6 +836,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
+#endif
 
 struct MenuBarControls: View {
     @ObservedObject var model: AppModel
@@ -807,6 +850,6 @@ struct MenuBarControls: View {
         Toggle("自动连接", isOn: Binding(get: { model.automatic }, set: { model.setAutomatic($0) }))
         Button("刷新网络") { model.refresh() }
         Divider()
-        Button("退出") { NSApplication.shared.terminate(nil) }.keyboardShortcut("q")
+        Button("退出") { model.quit() }.keyboardShortcut("q")
     }
 }
