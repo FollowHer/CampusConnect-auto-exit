@@ -88,6 +88,6 @@ Mac 应用需要在 macOS 环境中编译。[Actions 工作流](https://github.c
 
 ## 来源与许可
 
-本修改版由 [FollowHer](https://github.com/FollowHer) 维护，社交主页待补充。原项目为 [Ye9137/CampusConnect](https://github.com/Ye9137/CampusConnect)，原作者版权及 MIT 许可保留。
+本修改版由 [FollowHer](https://github.com/FollowHer) 维护，社交主页[FollowHer](https://v.douyin.com/61JZJpD94G0/)原项目为 [Ye9137/CampusConnect](https://github.com/Ye9137/CampusConnect)，原作者版权及 MIT 许可保留。
 
 本仓库的下载、源码、构建和反馈入口均指向 FollowHer 修改版；来源说明中的上游链接仅用于署名与溯源。第三方组件遵循各自许可，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和 [licenses](licenses/)。
